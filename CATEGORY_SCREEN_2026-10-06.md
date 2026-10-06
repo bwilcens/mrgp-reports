@@ -206,8 +206,6 @@ a. 0 cells (0.0%) have expected count less than 5. The minimum expected count is
 | N of Valid Cases | 59695 | | |
 
 a. 0 cells (0.0%) have expected count less than 5. The minimum expected count is 65.41.
-Warning message:
-In chisq.test(tab) : Chi-squared approximation may be incorrect
 
 ## Crosstabs 2024
 
@@ -363,8 +361,6 @@ a. 0 cells (0.0%) have expected count less than 5. The minimum expected count is
 | N of Valid Cases | 22571 | | |
 
 a. 0 cells (0.0%) have expected count less than 5. The minimum expected count is 6.18.
-Warning message:
-In chisq.test(tab) : Chi-squared approximation may be incorrect
 
 ## Script: anova_spss_tables.R
 
