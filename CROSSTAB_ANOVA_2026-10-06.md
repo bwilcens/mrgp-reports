@@ -1,8 +1,8 @@
-# Crosstabs and ANOVA, Classwork Style
+# Crosstab and ANOVA on Categoricals
 
-The task: cross-tabulate each categorical predictor (parent material, hydrologic group, VTrans district) against damage, then run the one-way ANOVA of ln(cost) by category on the damaged segments, and decide from each which categories can enter the two-part model as 0/1 indicators with the rest left off. Written in the step-by-step form of the GEOG 3505 exercises (Exercise 6 for the crosstabs, Exercise 3 for the ANOVA) so it can be stepped through line by line. Graded segments, Precip >= 3.51 in, Averill excluded; damage and cost from cost_dedup. Script run once with STORM = 2023 and once with STORM = 2024.
+The approach mirrors Dr. Wemple's homework assignments on crosstab and ANOVA.
 
-## Script: crosstab_binaries.R
+## Script: crosstab_anova.R
 
 ```r
 # =============================================================================
@@ -215,6 +215,16 @@ dmg$PARENT <- factor(dmg$PARENT)
 cat("--- Damaged segments per group ---\n");   print(table(dmg$PARENT))
 cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$PARENT, mean), 3))
 
+# Error bar plot: mean +/- 2 standard errors per group (Exercise 3, Question 1). Where the bars
+# fail to overlap, the means very likely differ; where they overlap heavily, they probably do not.
+mean_g <- tapply(dmg$log_cost, dmg$PARENT, mean)
+se_g   <- tapply(dmg$log_cost, dmg$PARENT, sd) / sqrt(table(dmg$PARENT))
+plot(1:nlevels(dmg$PARENT), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g, mean_g + 2 * se_g), na.rm = TRUE),
+     xlim = c(0.5, nlevels(dmg$PARENT) + 0.5), pch = 16, cex = 1.3, xaxt = "n",
+     xlab = "Parent material", ylab = "Mean ln(cost)", main = paste("ln(cost) by parent material,", STORM, "storm"))
+axis(1, at = 1:nlevels(dmg$PARENT), labels = paste0(levels(dmg$PARENT), "\nn=", table(dmg$PARENT)), cex.axis = 0.8, padj = 0.5)
+arrows(1:nlevels(dmg$PARENT), mean_g - 2 * se_g, 1:nlevels(dmg$PARENT), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
+
 cat("\n--- ANOVA table ---\n")
 print(summary(aov(log_cost ~ PARENT, data = dmg)))
 
@@ -250,6 +260,14 @@ dmg$HYDROGROUP <- factor(dmg$HYDROGROUP)
 cat("--- Damaged segments per group ---\n");   print(table(dmg$HYDROGROUP))
 cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$HYDROGROUP, mean), 3))
 
+mean_g <- tapply(dmg$log_cost, dmg$HYDROGROUP, mean)
+se_g   <- tapply(dmg$log_cost, dmg$HYDROGROUP, sd) / sqrt(table(dmg$HYDROGROUP))
+plot(1:nlevels(dmg$HYDROGROUP), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g, mean_g + 2 * se_g), na.rm = TRUE),
+     xlim = c(0.5, nlevels(dmg$HYDROGROUP) + 0.5), pch = 16, cex = 1.3, xaxt = "n",
+     xlab = "Hydrologic group", ylab = "Mean ln(cost)", main = paste("ln(cost) by hydrologic group,", STORM, "storm"))
+axis(1, at = 1:nlevels(dmg$HYDROGROUP), labels = paste0(levels(dmg$HYDROGROUP), "\nn=", table(dmg$HYDROGROUP)), cex.axis = 0.8, padj = 0.5)
+arrows(1:nlevels(dmg$HYDROGROUP), mean_g - 2 * se_g, 1:nlevels(dmg$HYDROGROUP), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
+
 cat("\n--- ANOVA table ---\n")
 print(summary(aov(log_cost ~ HYDROGROUP, data = dmg)))
 
@@ -282,6 +300,14 @@ dmg$vtrans_district <- factor(dmg$vtrans_district)
 
 cat("--- Damaged segments per group ---\n");   print(table(dmg$vtrans_district))
 cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$vtrans_district, mean), 3))
+
+mean_g <- tapply(dmg$log_cost, dmg$vtrans_district, mean)
+se_g   <- tapply(dmg$log_cost, dmg$vtrans_district, sd) / sqrt(table(dmg$vtrans_district))
+plot(1:nlevels(dmg$vtrans_district), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g, mean_g + 2 * se_g), na.rm = TRUE),
+     xlim = c(0.5, nlevels(dmg$vtrans_district) + 0.5), pch = 16, cex = 1.3, xaxt = "n",
+     xlab = "VTrans district", ylab = "Mean ln(cost)", main = paste("ln(cost) by VTrans district,", STORM, "storm"))
+axis(1, at = 1:nlevels(dmg$vtrans_district), labels = paste0(levels(dmg$vtrans_district), "\nn=", table(dmg$vtrans_district)), cex.axis = 0.8, padj = 0.5)
+arrows(1:nlevels(dmg$vtrans_district), mean_g - 2 * se_g, 1:nlevels(dmg$vtrans_district), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
 
 cat("\n--- ANOVA table ---\n")
 print(summary(aov(log_cost ~ vtrans_district, data = dmg)))
@@ -728,6 +754,14 @@ Left off (baseline): 9
 
 ```
 
+### Figures 2023: mean ln(cost) +/- 2 standard errors
+
+![ln(cost) by parent material, 2023](figures/crosstab_anova_2023_fig1.png)
+
+![ln(cost) by hydrologic group, 2023](figures/crosstab_anova_2023_fig2.png)
+
+![ln(cost) by VTrans district, 2023](figures/crosstab_anova_2023_fig3.png)
+
 ## Output 2024
 
 ```
@@ -1122,3 +1156,12 @@ Districts that become cost indicators: 5, 6, 7
 Left off (baseline): 9 
 
 ```
+
+### Figures 2024: mean ln(cost) +/- 2 standard errors
+
+![ln(cost) by parent material, 2024](figures/crosstab_anova_2024_fig1.png)
+
+![ln(cost) by hydrologic group, 2024](figures/crosstab_anova_2024_fig2.png)
+
+![ln(cost) by VTrans district, 2024](figures/crosstab_anova_2024_fig3.png)
+

@@ -208,6 +208,16 @@ dmg$PARENT <- factor(dmg$PARENT)
 cat("--- Damaged segments per group ---\n");   print(table(dmg$PARENT))
 cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$PARENT, mean), 3))
 
+# Error bar plot: mean +/- 2 standard errors per group (Exercise 3, Question 1). Where the bars
+# fail to overlap, the means very likely differ; where they overlap heavily, they probably do not.
+mean_g <- tapply(dmg$log_cost, dmg$PARENT, mean)
+se_g   <- tapply(dmg$log_cost, dmg$PARENT, sd) / sqrt(table(dmg$PARENT))
+plot(1:nlevels(dmg$PARENT), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g, mean_g + 2 * se_g), na.rm = TRUE),
+     xlim = c(0.5, nlevels(dmg$PARENT) + 0.5), pch = 16, cex = 1.3, xaxt = "n",
+     xlab = "Parent material", ylab = "Mean ln(cost)", main = paste("ln(cost) by parent material,", STORM, "storm"))
+axis(1, at = 1:nlevels(dmg$PARENT), labels = paste0(levels(dmg$PARENT), "\nn=", table(dmg$PARENT)), cex.axis = 0.8, padj = 0.5)
+arrows(1:nlevels(dmg$PARENT), mean_g - 2 * se_g, 1:nlevels(dmg$PARENT), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
+
 cat("\n--- ANOVA table ---\n")
 print(summary(aov(log_cost ~ PARENT, data = dmg)))
 
@@ -243,6 +253,14 @@ dmg$HYDROGROUP <- factor(dmg$HYDROGROUP)
 cat("--- Damaged segments per group ---\n");   print(table(dmg$HYDROGROUP))
 cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$HYDROGROUP, mean), 3))
 
+mean_g <- tapply(dmg$log_cost, dmg$HYDROGROUP, mean)
+se_g   <- tapply(dmg$log_cost, dmg$HYDROGROUP, sd) / sqrt(table(dmg$HYDROGROUP))
+plot(1:nlevels(dmg$HYDROGROUP), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g, mean_g + 2 * se_g), na.rm = TRUE),
+     xlim = c(0.5, nlevels(dmg$HYDROGROUP) + 0.5), pch = 16, cex = 1.3, xaxt = "n",
+     xlab = "Hydrologic group", ylab = "Mean ln(cost)", main = paste("ln(cost) by hydrologic group,", STORM, "storm"))
+axis(1, at = 1:nlevels(dmg$HYDROGROUP), labels = paste0(levels(dmg$HYDROGROUP), "\nn=", table(dmg$HYDROGROUP)), cex.axis = 0.8, padj = 0.5)
+arrows(1:nlevels(dmg$HYDROGROUP), mean_g - 2 * se_g, 1:nlevels(dmg$HYDROGROUP), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
+
 cat("\n--- ANOVA table ---\n")
 print(summary(aov(log_cost ~ HYDROGROUP, data = dmg)))
 
@@ -275,6 +293,14 @@ dmg$vtrans_district <- factor(dmg$vtrans_district)
 
 cat("--- Damaged segments per group ---\n");   print(table(dmg$vtrans_district))
 cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$vtrans_district, mean), 3))
+
+mean_g <- tapply(dmg$log_cost, dmg$vtrans_district, mean)
+se_g   <- tapply(dmg$log_cost, dmg$vtrans_district, sd) / sqrt(table(dmg$vtrans_district))
+plot(1:nlevels(dmg$vtrans_district), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g, mean_g + 2 * se_g), na.rm = TRUE),
+     xlim = c(0.5, nlevels(dmg$vtrans_district) + 0.5), pch = 16, cex = 1.3, xaxt = "n",
+     xlab = "VTrans district", ylab = "Mean ln(cost)", main = paste("ln(cost) by VTrans district,", STORM, "storm"))
+axis(1, at = 1:nlevels(dmg$vtrans_district), labels = paste0(levels(dmg$vtrans_district), "\nn=", table(dmg$vtrans_district)), cex.axis = 0.8, padj = 0.5)
+arrows(1:nlevels(dmg$vtrans_district), mean_g - 2 * se_g, 1:nlevels(dmg$vtrans_district), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
 
 cat("\n--- ANOVA table ---\n")
 print(summary(aov(log_cost ~ vtrans_district, data = dmg)))
