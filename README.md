@@ -10,7 +10,7 @@ Data: compliance-graded road segments with at least 3.51 in of rain; damage and 
 ## Sources for the code
 
 - Crosstab workflow (`table`, `margin.table`, `prop.table`, `chisq.test`): Kabacoff, *Quick-R: Frequencies and Crosstabs*, https://www.datacamp.com/doc/r/frequencies
-- Expected counts and adjusted (standardized) residuals: R documentation for `chisq.test`, components `expected` and `stdres`, following Agresti (2007) *An Introduction to Categorical Data Analysis*, section 2.4.5, https://stat.ethz.ch/R-manual/R-devel/library/stats/html/chisq.test.html
+- Expected counts: R documentation for `chisq.test`, component `expected`, https://stat.ethz.ch/R-manual/R-devel/library/stats/html/chisq.test.html
 - One-way ANOVA (`aov`, `summary`) and pairwise comparisons: Datanovia, *One-Way ANOVA in R*, https://www.datanovia.com/learn/biostatistics/anova/anova-in-r ; R documentation for `pairwise.t.test` (pooled SD, `p.adjust.method = "bonferroni"`), https://stat.ethz.ch/R-manual/R-devel/library/stats/html/pairwise.t.test.html
 - SPSS ONEWAY post hoc layout (mean difference, standard error, Bonferroni significance and confidence interval): IBM SPSS Statistics Algorithms, chapter *ONEWAY Algorithms*
 - Town-clustered standard errors (`sandwich::vcovCL`): Zeileis, Köll and Graham (2020), *Various Versatile Variances: An Object-Oriented Implementation of Clustered Covariances in R*, Journal of Statistical Software 95(1), https://doi.org/10.18637/jss.v095.i01
