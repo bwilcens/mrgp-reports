@@ -474,7 +474,7 @@ ten sample towns
 
 # Both-source towns: pooled vs VTrans only
 
-The same model on only the towns that hold both a FEMA and a VTrans damage record in that storm, fitted twice on the same segments: once on the pooled de-duplicated cost (OUTCOME = cost_dedup) and once on the VTrans records alone (OUTCOME = vt_cost). The only thing that changes between the two runs is which records count as damage. Script run four times: each storm with each OUTCOME.
+The same model on only the towns that hold both a FEMA and a VTrans damage record in that storm, fitted twice on the same segments: once on the pooled de-duplicated cost (OUTCOME = cost_dedup) and once on the VTrans records alone (OUTCOME = vt_cost). The only thing that changes between the two runs is which records count as damage. The avoided cost carries the same town-clustered delta-method interval as the deck. Script run four times: each storm with each OUTCOME.
 
 ## Script: both_source_towns.R
 
@@ -544,11 +544,37 @@ cat("deviance R2\n"); print(round(1 - p2$deviance / p2$null.deviance, 4))
 cat("AVOIDED COST\n")
 d0 <- d
 d0$compliant <- factor("Does Not Meet", levels = levels(d$compliant))
-avoided   <- (predict(p1, newdata = d0, type = "response") - predict(p1, newdata = d, type = "response")) *
-             predict(p2, newdata = d, type = "response")
-compliant <- d$compliant == "Compliant"
+p_observed <- predict(p1, newdata = d,  type = "response")   # probability of damage as rated
+p_recoded  <- predict(p1, newdata = d0, type = "response")   # probability if rated Does Not Meet
+cost_hat   <- predict(p2, newdata = d,  type = "response")   # predicted repair cost
+avoided    <- (p_recoded - p_observed) * cost_hat
+compliant  <- d$compliant == "Compliant"
 cat("compliant segments recoded\n");  print(sum(compliant))
 cat("avoided cost, these towns\n");   print(round(sum(avoided[compliant])))
+
+# town-clustered standard error of the avoided cost, as in the deck script (R/105): the delta method with the
+# joint HC1 sandwich of both parts, scores added within each town so the cross-part block is kept
+k1 <- names(coef(p1))[!is.na(coef(p1))]
+k2 <- names(coef(p2))[!is.na(coef(p2))]
+X1 <- model.matrix(delete.response(terms(p1)), d,  xlev = p1$xlevels)[, k1]
+X0 <- model.matrix(delete.response(terms(p1)), d0, xlev = p1$xlevels)[, k1]
+Z  <- model.matrix(delete.response(terms(p2)), d,  xlev = p2$xlevels)[, k2]
+h  <- c(colSums(((cost_hat * p_recoded * (1 - p_recoded)) * X0 - (cost_hat * p_observed * (1 - p_observed)) * X1)[compliant, ]),
+        colSums(((p_recoded - p_observed) * cost_hat * Z)[compliant, ]))
+B1 <- summary(p1)$cov.unscaled
+w  <- weights(p2, "working"); rr <- residuals(p2, "working") * w
+B2 <- summary(p2)$cov.unscaled * sum(rr^2) / sum(w)
+towns <- sort(unique(d$Town))
+U1 <- matrix(0, length(towns), length(k1), dimnames = list(towns, k1)); s1 <- rowsum(estfun(p1), d$Town); U1[rownames(s1), ] <- s1
+U2 <- matrix(0, length(towns), length(k2), dimnames = list(towns, k2)); s2 <- rowsum(estfun(p2), k$Town); U2[rownames(s2), ] <- s2
+G1 <- length(towns); G2 <- length(unique(k$Town))
+a1 <- G1 / (G1 - 1) * (nrow(d) - 1) / (nrow(d) - length(k1))
+a2 <- G2 / (G2 - 1) * (nrow(k) - 1) / (nrow(k) - length(k2))
+V  <- crossprod(cbind(sqrt(a1) * U1 %*% B1, sqrt(a2) * U2 %*% B2))
+se_avoided <- sqrt(drop(t(h) %*% V %*% h))
+cat("clustered SE\n");                print(round(se_avoided))
+cat("clustered 95% interval\n");      print(round(sum(avoided[compliant]) + c(-1.96, 1.96) * se_avoided))
+
 cat("study towns\n")
 print(round(tapply(avoided[compliant], d$Town[compliant], sum)[c("Brattleboro", "Corinth", "Wallingford", "Hardwick",
       "West Windsor", "Wolcott", "Washington", "Richmond", "Stamford", "Starksboro")]))
@@ -557,41 +583,42 @@ cat("SUMMARY", STORM, OUTCOME, "\n")
 print(c(towns = length(unique(d$Town)), damaged = sum(d$damaged), odds_ratio = round(exp(b), 3),
         lo = round(exp(b - 1.96 * se), 3), hi = round(exp(b + 1.96 * se), 3),
         AUC = round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 3),
-        dev_r2 = round(1 - p2$deviance / p2$null.deviance, 3), avoided = round(sum(avoided[compliant]))))
+        dev_r2 = round(1 - p2$deviance / p2$null.deviance, 3), avoided = round(sum(avoided[compliant])),
+        avoided_lo = round(sum(avoided[compliant]) - 1.96 * se_avoided), avoided_hi = round(sum(avoided[compliant]) + 1.96 * se_avoided)))
 ```
 
 ## Summary of the four runs
 
 ```
 SUMMARY 2023 cost_dedup 
-      towns     damaged  odds_ratio          lo          hi         AUC 
-     24.000     667.000       0.889       0.713       1.110       0.749 
-     dev_r2     avoided 
-      0.308 2258820.000 
+       towns      damaged   odds_ratio           lo           hi          AUC 
+      24.000      667.000        0.889        0.713        1.110        0.749 
+      dev_r2      avoided   avoided_lo   avoided_hi 
+       0.308  2258820.000 -2200659.000  6718298.000 
 ```
 
 ```
 SUMMARY 2023 vt_cost 
-      towns     damaged  odds_ratio          lo          hi         AUC 
-     24.000     261.000       1.117       0.822       1.519       0.793 
-     dev_r2     avoided 
-      0.389 -790326.000 
+       towns      damaged   odds_ratio           lo           hi          AUC 
+      24.000      261.000        1.117        0.822        1.519        0.793 
+      dev_r2      avoided   avoided_lo   avoided_hi 
+       0.389  -790326.000 -2947316.000  1366663.000 
 ```
 
 ```
 SUMMARY 2024 cost_dedup 
        towns      damaged   odds_ratio           lo           hi          AUC 
       26.000      747.000        0.705        0.552        0.901        0.744 
-      dev_r2      avoided 
-       0.194 10490094.000 
+      dev_r2      avoided   avoided_lo   avoided_hi 
+       0.194 10490094.000   911257.000 20068931.000 
 ```
 
 ```
 SUMMARY 2024 vt_cost 
-      towns     damaged  odds_ratio          lo          hi         AUC 
-     26.000     262.000       0.618       0.474       0.807       0.799 
-     dev_r2     avoided 
-      0.324 5926812.000 
+       towns      damaged   odds_ratio           lo           hi          AUC 
+      26.000      262.000        0.618        0.474        0.807        0.799 
+      dev_r2      avoided   avoided_lo   avoided_hi 
+       0.324  5926812.000  1612337.000 10241287.000 
 ```
 
 ## Output 2023, pooled de-duplicated cost
@@ -724,16 +751,20 @@ compliant segments recoded
 [1] 6926
 avoided cost, these towns
 [1] 2258820
+clustered SE
+[1] 2275244
+clustered 95% interval
+[1] -2200659  6718298
 study towns
        <NA>        <NA> Wallingford    Hardwick        <NA>     Wolcott 
          NA          NA       40173       77545          NA      121610 
  Washington    Richmond    Stamford        <NA> 
      252246       44755       49184          NA 
 SUMMARY 2023 cost_dedup 
-      towns     damaged  odds_ratio          lo          hi         AUC 
-     24.000     667.000       0.889       0.713       1.110       0.749 
-     dev_r2     avoided 
-      0.308 2258820.000 
+       towns      damaged   odds_ratio           lo           hi          AUC 
+      24.000      667.000        0.889        0.713        1.110        0.749 
+      dev_r2      avoided   avoided_lo   avoided_hi 
+       0.308  2258820.000 -2200659.000  6718298.000 
 ```
 
 ## Output 2023, VTrans only
@@ -868,16 +899,20 @@ compliant segments recoded
 [1] 6926
 avoided cost, these towns
 [1] -790326
+clustered SE
+[1] 1100505
+clustered 95% interval
+[1] -2947316  1366663
 study towns
        <NA>        <NA> Wallingford    Hardwick        <NA>     Wolcott 
          NA          NA      -20879      -26204          NA      -54291 
  Washington    Richmond    Stamford        <NA> 
     -127674       -5306      -11387          NA 
 SUMMARY 2023 vt_cost 
-      towns     damaged  odds_ratio          lo          hi         AUC 
-     24.000     261.000       1.117       0.822       1.519       0.793 
-     dev_r2     avoided 
-      0.389 -790326.000 
+       towns      damaged   odds_ratio           lo           hi          AUC 
+      24.000      261.000        1.117        0.822        1.519        0.793 
+      dev_r2      avoided   avoided_lo   avoided_hi 
+       0.389  -790326.000 -2947316.000  1366663.000 
 ```
 
 ## Output 2024, pooled de-duplicated cost
@@ -1014,6 +1049,10 @@ compliant segments recoded
 [1] 7435
 avoided cost, these towns
 [1] 10490094
+clustered SE
+[1] 4887162
+clustered 95% interval
+[1]   911257 20068931
 study towns
       <NA>       <NA>       <NA>   Hardwick       <NA>    Wolcott       <NA> 
         NA         NA         NA     705430         NA     233715         NA 
@@ -1022,8 +1061,8 @@ study towns
 SUMMARY 2024 cost_dedup 
        towns      damaged   odds_ratio           lo           hi          AUC 
       26.000      747.000        0.705        0.552        0.901        0.744 
-      dev_r2      avoided 
-       0.194 10490094.000 
+      dev_r2      avoided   avoided_lo   avoided_hi 
+       0.194 10490094.000   911257.000 20068931.000 
 ```
 
 ## Output 2024, VTrans only
@@ -1156,15 +1195,19 @@ compliant segments recoded
 [1] 7435
 avoided cost, these towns
 [1] 5926812
+clustered SE
+[1] 2201263
+clustered 95% interval
+[1]  1612337 10241287
 study towns
       <NA>       <NA>       <NA>   Hardwick       <NA>    Wolcott       <NA> 
         NA         NA         NA     399424         NA     152250         NA 
   Richmond       <NA> Starksboro 
     310168         NA     152020 
 SUMMARY 2024 vt_cost 
-      towns     damaged  odds_ratio          lo          hi         AUC 
-     26.000     262.000       0.618       0.474       0.807       0.799 
-     dev_r2     avoided 
-      0.324 5926812.000 
+       towns      damaged   odds_ratio           lo           hi          AUC 
+      26.000      262.000        0.618        0.474        0.807        0.799 
+      dev_r2      avoided   avoided_lo   avoided_hi 
+       0.324  5926812.000  1612337.000 10241287.000 
 ```
 
