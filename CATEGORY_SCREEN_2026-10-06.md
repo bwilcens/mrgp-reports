@@ -5,637 +5,366 @@ Graded segments, Precip >= 3.51 in, Averill excluded. Damage and cost = cost_ded
 ## Script: crosstab.R
 
 ```r
-# crosstab.R -- crosstab of each category against damage, following the standard R workflow
-#   (table, margin.table, prop.table, chisq.test) and then gmodels::CrossTable in its SPSS format.
+# crosstab.R -- crosstab of each category against damage: the standard R workflow (table, margin.table,
+#   prop.table, chisq.test), printed as the SPSS tables: Crosstabulation (Count), Crosstabulation
+#   (Expected Count), Crosstabulation (Adjusted Residual) and Chi-Square Tests.
 # Set STORM to 2023 or 2024 and run from mrgp-roads-core:
 #   "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/crosstab.R
-# Graded segments, Precip >= 3.51 in, Averill excluded; damage = cost_dedup > 0.
+# Graded segments, Precip >= 3.51 in, Averill excluded; damage = cost_dedup > 0. Output is markdown.
 
 STORM <- 2023
-
-library(gmodels)
 
 d <- read.csv(paste0("twopart_simple_2026-09-17/data/analysis_", STORM, "_2026-09-27.csv"))
 d <- d[d$Precip >= 3.51 & d$Town != "Averill", ]
 d$damaged <- as.integer(d$cost_dedup > 0)
 
-cat("CROSSTABS", STORM, "\n")
+for (v in c("PARENT", "HYDROGROUP", "vtrans_district")) {
+  mytable  <- table(d[[v]], d$damaged)
+  rowtotal <- margin.table(mytable, 1)
+  coltotal <- margin.table(mytable, 2)
+  rowpct   <- prop.table(mytable, 1)
+  chi      <- chisq.test(mytable)
+  expected <- chi$expected
+  LR       <- 2 * sum(mytable[mytable > 0] * log(mytable[mytable > 0] / expected[mytable > 0]))
 
-mytable <- table(d$PARENT, d$damaged)
-print(mytable)
-print(margin.table(mytable, 1))
-print(round(prop.table(mytable, 1), 4))
-print(chisq.test(mytable))
-CrossTable(d$PARENT, d$damaged, expected = TRUE, prop.r = TRUE, prop.c = FALSE, prop.t = FALSE,
-           prop.chisq = FALSE, chisq = TRUE, asresid = TRUE, format = "SPSS")
+  cat("\n**", v, " \\* damaged Crosstabulation** -- Count, ", STORM, " storm\n\n", sep = "")
+  cat("| ", v, " | 0 = not damaged | 1 = damaged | Total |\n|---|---:|---:|---:|\n", sep = "")
+  for (r in rownames(mytable)) cat("| ", r, " | ", mytable[r, "0"], " | ", mytable[r, "1"], " | ", rowtotal[r], " |\n", sep = "")
+  cat("| Total | ", coltotal["0"], " | ", coltotal["1"], " | ", sum(mytable), " |\n", sep = "")
 
-mytable <- table(d$HYDROGROUP, d$damaged)
-print(mytable)
-print(margin.table(mytable, 1))
-print(round(prop.table(mytable, 1), 4))
-print(chisq.test(mytable))
-CrossTable(d$HYDROGROUP, d$damaged, expected = TRUE, prop.r = TRUE, prop.c = FALSE, prop.t = FALSE,
-           prop.chisq = FALSE, chisq = TRUE, asresid = TRUE, format = "SPSS")
+  cat("\n**", v, " \\* damaged Crosstabulation** -- Expected Count\n\n", sep = "")
+  cat("| ", v, " | 0 = not damaged | 1 = damaged | Total |\n|---|---:|---:|---:|\n", sep = "")
+  for (r in rownames(mytable)) cat("| ", r, " | ", sprintf("%.1f", expected[r, "0"]), " | ", sprintf("%.1f", expected[r, "1"]), " | ", sprintf("%.1f", rowtotal[r]), " |\n", sep = "")
+  cat("| Total | ", sprintf("%.1f", coltotal["0"]), " | ", sprintf("%.1f", coltotal["1"]), " | ", sprintf("%.1f", sum(mytable)), " |\n", sep = "")
 
-mytable <- table(d$vtrans_district, d$damaged)
-print(mytable)
-print(margin.table(mytable, 1))
-print(round(prop.table(mytable, 1), 4))
-print(chisq.test(mytable))
-CrossTable(d$vtrans_district, d$damaged, expected = TRUE, prop.r = TRUE, prop.c = FALSE, prop.t = FALSE,
-           prop.chisq = FALSE, chisq = TRUE, asresid = TRUE, format = "SPSS")
+  cat("\n**", v, " \\* damaged Crosstabulation** -- Row Percent and Adjusted Residual\n\n", sep = "")
+  cat("| ", v, " | % damaged | Adjusted Residual (damaged) |\n|---|---:|---:|\n", sep = "")
+  for (r in rownames(mytable)) cat("| ", r, " | ", sprintf("%.1f%%", 100 * rowpct[r, "1"]), " | ", sprintf("%.1f", chi$stdres[r, "1"]), " |\n", sep = "")
+
+  cat("\n**Chi-Square Tests**\n\n")
+  cat("| | Value | df | Asymptotic Significance (2-sided) |\n|---|---:|---:|---:|\n")
+  cat("| Pearson Chi-Square | ", sprintf("%.3f", chi$statistic), "<sup>a</sup> | ", chi$parameter, " | ",
+      sub("^0", "", sprintf("%.3f", chi$p.value)), " |\n", sep = "")
+  cat("| Likelihood Ratio | ", sprintf("%.3f", LR), " | ", chi$parameter, " | ",
+      sub("^0", "", sprintf("%.3f", pchisq(LR, chi$parameter, lower.tail = FALSE))), " |\n", sep = "")
+  cat("| N of Valid Cases | ", sum(mytable), " | | |\n", sep = "")
+  cat("\na. ", sum(expected < 5), " cells (", sprintf("%.1f%%", 100 * mean(expected < 5)), ") have expected count less than 5. The minimum expected count is ",
+      sprintf("%.2f", min(expected)), ".\n", sep = "")
+}
 ```
 
 ## Crosstabs 2023
 
-```
-CROSSTABS 2023 
-       
-            0     1
-  A      2389   115
-  DT    23838   682
-  DT/GT   169     8
-  GF     9947   213
-  GL     2456    43
-  GT    17767   386
-  GT/DT  1509     9
-  M       163     1
+**PARENT \* damaged Crosstabulation** -- Count, 2023 storm
 
-    A    DT DT/GT    GF    GL    GT GT/DT     M 
- 2504 24520   177 10160  2499 18153  1518   164 
-       
-             0      1
-  A     0.9541 0.0459
-  DT    0.9722 0.0278
-  DT/GT 0.9548 0.0452
-  GF    0.9790 0.0210
-  GL    0.9828 0.0172
-  GT    0.9787 0.0213
-  GT/DT 0.9941 0.0059
-  M     0.9939 0.0061
+| PARENT | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| A | 2389 | 115 | 2504 |
+| DT | 23838 | 682 | 24520 |
+| DT/GT | 169 | 8 | 177 |
+| GF | 9947 | 213 | 10160 |
+| GL | 2456 | 43 | 2499 |
+| GT | 17767 | 386 | 18153 |
+| GT/DT | 1509 | 9 | 1518 |
+| M | 163 | 1 | 164 |
+| Total | 58238 | 1457 | 59695 |
 
-	Pearson's Chi-squared test
+**PARENT \* damaged Crosstabulation** -- Expected Count
 
-data:  mytable
-X-squared = 105.97, df = 7, p-value < 2.2e-16
+| PARENT | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| A | 2442.9 | 61.1 | 2504.0 |
+| DT | 23921.5 | 598.5 | 24520.0 |
+| DT/GT | 172.7 | 4.3 | 177.0 |
+| GF | 9912.0 | 248.0 | 10160.0 |
+| GL | 2438.0 | 61.0 | 2499.0 |
+| GT | 17709.9 | 443.1 | 18153.0 |
+| GT/DT | 1480.9 | 37.1 | 1518.0 |
+| M | 160.0 | 4.0 | 164.0 |
+| Total | 58238.0 | 1457.0 | 59695.0 |
 
-   Cell Contents
-|-------------------------|
-|                   Count |
-|         Expected Values |
-|             Row Percent |
-|           Adj Std Resid |
-|-------------------------|
+**PARENT \* damaged Crosstabulation** -- Row Percent and Adjusted Residual
 
-Total Observations in Table:  59695 
+| PARENT | % damaged | Adjusted Residual (damaged) |
+|---|---:|---:|
+| A | 4.6% | 7.1 |
+| DT | 2.8% | 4.5 |
+| DT/GT | 4.5% | 1.8 |
+| GF | 2.1% | -2.5 |
+| GL | 1.7% | -2.4 |
+| GT | 2.1% | -3.3 |
+| GT/DT | 0.6% | -4.7 |
+| M | 0.6% | -1.5 |
 
-             | d$damaged 
-    d$PARENT |        0  |        1  | Row Total | 
--------------|-----------|-----------|-----------|
-           A |     2389  |      115  |     2504  | 
-             | 2442.884  |   61.116  |           | 
-             |   95.407% |    4.593% |    4.195% | 
-             |   -7.129  |    7.129  |           | 
--------------|-----------|-----------|-----------|
-          DT |    23838  |      682  |    24520  | 
-             | 23921.530  |  598.470  |           | 
-             |   97.219% |    2.781% |   41.075% | 
-             |   -4.503  |    4.503  |           | 
--------------|-----------|-----------|-----------|
-       DT/GT |      169  |        8  |      177  | 
-             |  172.680  |    4.320  |           | 
-             |   95.480% |    4.520% |    0.297% | 
-             |   -1.795  |    1.795  |           | 
--------------|-----------|-----------|-----------|
-          GF |     9947  |      213  |    10160  | 
-             | 9912.021  |  247.979  |           | 
-             |   97.904% |    2.096% |   17.020% | 
-             |    2.469  |   -2.469  |           | 
--------------|-----------|-----------|-----------|
-          GL |     2456  |       43  |     2499  | 
-             | 2438.006  |   60.994  |           | 
-             |   98.279% |    1.721% |    4.186% | 
-             |    2.383  |   -2.383  |           | 
--------------|-----------|-----------|-----------|
-          GT |    17767  |      386  |    18153  | 
-             | 17709.932  |  443.068  |           | 
-             |   97.874% |    2.126% |   30.410% | 
-             |    3.290  |   -3.290  |           | 
--------------|-----------|-----------|-----------|
-       GT/DT |     1509  |        9  |     1518  | 
-             | 1480.950  |   37.050  |           | 
-             |   99.407% |    0.593% |    2.543% | 
-             |    4.726  |   -4.726  |           | 
--------------|-----------|-----------|-----------|
-           M |      163  |        1  |      164  | 
-             |  159.997  |    4.003  |           | 
-             |   99.390% |    0.610% |    0.275% | 
-             |    1.522  |   -1.522  |           | 
--------------|-----------|-----------|-----------|
-Column Total |    58238  |     1457  |    59695  | 
--------------|-----------|-----------|-----------|
+**Chi-Square Tests**
 
- 
-Statistics for All Table Factors
+| | Value | df | Asymptotic Significance (2-sided) |
+|---|---:|---:|---:|
+| Pearson Chi-Square | 105.969<sup>a</sup> | 7 | .000 |
+| Likelihood Ratio | 106.528 | 7 | .000 |
+| N of Valid Cases | 59695 | | |
 
-Pearson's Chi-squared test 
-------------------------------------------------------------
-Chi^2 =  105.9693     d.f. =  7     p =  6.287026e-20 
+a. 2 cells (12.5%) have expected count less than 5. The minimum expected count is 4.00.
 
- 
-       Minimum expected frequency: 4.002814 
-Cells with Expected Frequency < 5: 2 of 16 (12.5%)
+**HYDROGROUP \* damaged Crosstabulation** -- Count, 2023 storm
 
-           
-                0     1
-  A          9350   206
-  A/D         745     8
-  B          8310   254
-  B/D        1976    75
-  C         14074   341
-  C/D        9331   193
-  D         14173   370
-  not rated   279    10
+| HYDROGROUP | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| A | 9350 | 206 | 9556 |
+| A/D | 745 | 8 | 753 |
+| B | 8310 | 254 | 8564 |
+| B/D | 1976 | 75 | 2051 |
+| C | 14074 | 341 | 14415 |
+| C/D | 9331 | 193 | 9524 |
+| D | 14173 | 370 | 14543 |
+| not rated | 279 | 10 | 289 |
+| Total | 58238 | 1457 | 59695 |
 
-        A       A/D         B       B/D         C       C/D         D not rated 
-     9556       753      8564      2051     14415      9524     14543       289 
-           
-                 0      1
-  A         0.9784 0.0216
-  A/D       0.9894 0.0106
-  B         0.9703 0.0297
-  B/D       0.9634 0.0366
-  C         0.9763 0.0237
-  C/D       0.9797 0.0203
-  D         0.9746 0.0254
-  not rated 0.9654 0.0346
+**HYDROGROUP \* damaged Crosstabulation** -- Expected Count
 
-	Pearson's Chi-squared test
+| HYDROGROUP | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| A | 9322.8 | 233.2 | 9556.0 |
+| A/D | 734.6 | 18.4 | 753.0 |
+| B | 8355.0 | 209.0 | 8564.0 |
+| B/D | 2000.9 | 50.1 | 2051.0 |
+| C | 14063.2 | 351.8 | 14415.0 |
+| C/D | 9291.5 | 232.5 | 9524.0 |
+| D | 14188.0 | 355.0 | 14543.0 |
+| not rated | 281.9 | 7.1 | 289.0 |
+| Total | 58238.0 | 1457.0 | 59695.0 |
 
-data:  mytable
-X-squared = 41.045, df = 7, p-value = 7.936e-07
+**HYDROGROUP \* damaged Crosstabulation** -- Row Percent and Adjusted Residual
 
-   Cell Contents
-|-------------------------|
-|                   Count |
-|         Expected Values |
-|             Row Percent |
-|           Adj Std Resid |
-|-------------------------|
+| HYDROGROUP | % damaged | Adjusted Residual (damaged) |
+|---|---:|---:|
+| A | 2.2% | -2.0 |
+| A/D | 1.1% | -2.5 |
+| B | 3.0% | 3.4 |
+| B/D | 3.7% | 3.6 |
+| C | 2.4% | -0.7 |
+| C/D | 2.0% | -2.9 |
+| D | 2.5% | 0.9 |
+| not rated | 3.5% | 1.1 |
 
-Total Observations in Table:  59695 
+**Chi-Square Tests**
 
-             | d$damaged 
-d$HYDROGROUP |        0  |        1  | Row Total | 
--------------|-----------|-----------|-----------|
-           A |     9350  |      206  |     9556  | 
-             | 9322.763  |  233.237  |           | 
-             |   97.844% |    2.156% |   16.008% | 
-             |    1.970  |   -1.970  |           | 
--------------|-----------|-----------|-----------|
-         A/D |      745  |        8  |      753  | 
-             |  734.621  |   18.379  |           | 
-             |   98.938% |    1.062% |    1.261% | 
-             |    2.467  |   -2.467  |           | 
--------------|-----------|-----------|-----------|
-           B |     8310  |      254  |     8564  | 
-             | 8354.975  |  209.025  |           | 
-             |   97.034% |    2.966% |   14.346% | 
-             |   -3.403  |    3.403  |           | 
--------------|-----------|-----------|-----------|
-         B/D |     1976  |       75  |     2051  | 
-             | 2000.940  |   50.060  |           | 
-             |   96.343% |    3.657% |    3.436% | 
-             |   -3.632  |    3.632  |           | 
--------------|-----------|-----------|-----------|
-           C |    14074  |      341  |    14415  | 
-             | 14063.167  |  351.833  |           | 
-             |   97.634% |    2.366% |   24.148% | 
-             |    0.671  |   -0.671  |           | 
--------------|-----------|-----------|-----------|
-         C/D |     9331  |      193  |     9524  | 
-             | 9291.544  |  232.456  |           | 
-             |   97.974% |    2.026% |   15.954% | 
-             |    2.858  |   -2.858  |           | 
--------------|-----------|-----------|-----------|
-           D |    14173  |      370  |    14543  | 
-             | 14188.043  |  354.957  |           | 
-             |   97.456% |    2.544% |   24.362% | 
-             |   -0.929  |    0.929  |           | 
--------------|-----------|-----------|-----------|
-   not rated |      279  |       10  |      289  | 
-             |  281.946  |    7.054  |           | 
-             |   96.540% |    3.460% |    0.484% | 
-             |   -1.126  |    1.126  |           | 
--------------|-----------|-----------|-----------|
-Column Total |    58238  |     1457  |    59695  | 
--------------|-----------|-----------|-----------|
+| | Value | df | Asymptotic Significance (2-sided) |
+|---|---:|---:|---:|
+| Pearson Chi-Square | 41.045<sup>a</sup> | 7 | .000 |
+| Likelihood Ratio | 40.740 | 7 | .000 |
+| N of Valid Cases | 59695 | | |
 
- 
-Statistics for All Table Factors
+a. 0 cells (0.0%) have expected count less than 5. The minimum expected count is 7.05.
 
-Pearson's Chi-squared test 
-------------------------------------------------------------
-Chi^2 =  41.04512     d.f. =  7     p =  7.936052e-07 
+**vtrans_district \* damaged Crosstabulation** -- Count, 2023 storm
 
- 
-       Minimum expected frequency: 7.05374 
+| vtrans_district | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| 1 | 6046 | 33 | 6079 |
+| 2 | 6069 | 520 | 6589 |
+| 3 | 10360 | 147 | 10507 |
+| 4 | 10425 | 137 | 10562 |
+| 5 | 2645 | 35 | 2680 |
+| 6 | 9650 | 505 | 10155 |
+| 7 | 3617 | 41 | 3658 |
+| 8 | 4196 | 25 | 4221 |
+| 9 | 5230 | 14 | 5244 |
+| Total | 58238 | 1457 | 59695 |
 
-   
-        0     1
-  1  6046    33
-  2  6069   520
-  3 10360   147
-  4 10425   137
-  5  2645    35
-  6  9650   505
-  7  3617    41
-  8  4196    25
-  9  5230    14
+**vtrans_district \* damaged Crosstabulation** -- Expected Count
 
-    1     2     3     4     5     6     7     8     9 
- 6079  6589 10507 10562  2680 10155  3658  4221  5244 
-   
-         0      1
-  1 0.9946 0.0054
-  2 0.9211 0.0789
-  3 0.9860 0.0140
-  4 0.9870 0.0130
-  5 0.9869 0.0131
-  6 0.9503 0.0497
-  7 0.9888 0.0112
-  8 0.9941 0.0059
-  9 0.9973 0.0027
+| vtrans_district | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| 1 | 5930.6 | 148.4 | 6079.0 |
+| 2 | 6428.2 | 160.8 | 6589.0 |
+| 3 | 10250.6 | 256.4 | 10507.0 |
+| 4 | 10304.2 | 257.8 | 10562.0 |
+| 5 | 2614.6 | 65.4 | 2680.0 |
+| 6 | 9907.1 | 247.9 | 10155.0 |
+| 7 | 3568.7 | 89.3 | 3658.0 |
+| 8 | 4118.0 | 103.0 | 4221.0 |
+| 9 | 5116.0 | 128.0 | 5244.0 |
+| Total | 58238.0 | 1457.0 | 59695.0 |
 
-	Pearson's Chi-squared test
+**vtrans_district \* damaged Crosstabulation** -- Row Percent and Adjusted Residual
 
-data:  mytable
-X-squared = 1499.5, df = 8, p-value < 2.2e-16
+| vtrans_district | % damaged | Adjusted Residual (damaged) |
+|---|---:|---:|
+| 1 | 0.5% | -10.1 |
+| 2 | 7.9% | 30.4 |
+| 3 | 1.4% | -7.6 |
+| 4 | 1.3% | -8.4 |
+| 5 | 1.3% | -3.9 |
+| 6 | 5.0% | 18.2 |
+| 7 | 1.1% | -5.3 |
+| 8 | 0.6% | -8.1 |
+| 9 | 0.3% | -10.7 |
 
-   Cell Contents
-|-------------------------|
-|                   Count |
-|         Expected Values |
-|             Row Percent |
-|           Adj Std Resid |
-|-------------------------|
+**Chi-Square Tests**
 
-Total Observations in Table:  59695 
+| | Value | df | Asymptotic Significance (2-sided) |
+|---|---:|---:|---:|
+| Pearson Chi-Square | 1499.458<sup>a</sup> | 8 | .000 |
+| Likelihood Ratio | 1299.898 | 8 | .000 |
+| N of Valid Cases | 59695 | | |
 
-                  | d$damaged 
-d$vtrans_district |        0  |        1  | Row Total | 
-------------------|-----------|-----------|-----------|
-                1 |     6046  |       33  |     6079  | 
-                  | 5930.627  |  148.373  |           | 
-                  |   99.457% |    0.543% |   10.183% | 
-                  |   10.118  |  -10.118  |           | 
-------------------|-----------|-----------|-----------|
-                2 |     6069  |      520  |     6589  | 
-                  | 6428.180  |  160.820  |           | 
-                  |   92.108% |    7.892% |   11.038% | 
-                  |  -30.402  |   30.402  |           | 
-------------------|-----------|-----------|-----------|
-                3 |    10360  |      147  |    10507  | 
-                  | 10250.551  |  256.449  |           | 
-                  |   98.601% |    1.399% |   17.601% | 
-                  |    7.623  |   -7.623  |           | 
-------------------|-----------|-----------|-----------|
-                4 |    10425  |      137  |    10562  | 
-                  | 10304.209  |  257.791  |           | 
-                  |   98.703% |    1.297% |   17.693% | 
-                  |    8.396  |   -8.396  |           | 
-------------------|-----------|-----------|-----------|
-                5 |     2645  |       35  |     2680  | 
-                  | 2614.588  |   65.412  |           | 
-                  |   98.694% |    1.306% |    4.489% | 
-                  |    3.895  |   -3.895  |           | 
-------------------|-----------|-----------|-----------|
-                6 |     9650  |      505  |    10155  | 
-                  | 9907.143  |  247.857  |           | 
-                  |   95.027% |    4.973% |   17.011% | 
-                  |  -18.152  |   18.152  |           | 
-------------------|-----------|-----------|-----------|
-                7 |     3617  |       41  |     3658  | 
-                  | 3568.718  |   89.282  |           | 
-                  |   98.879% |    1.121% |    6.128% | 
-                  |    5.340  |   -5.340  |           | 
-------------------|-----------|-----------|-----------|
-                8 |     4196  |       25  |     4221  | 
-                  | 4117.976  |  103.024  |           | 
-                  |   99.408% |    0.592% |    7.071% | 
-                  |    8.073  |   -8.073  |           | 
-------------------|-----------|-----------|-----------|
-                9 |     5230  |       14  |     5244  | 
-                  | 5116.008  |  127.992  |           | 
-                  |   99.733% |    0.267% |    8.785% | 
-                  |   10.681  |  -10.681  |           | 
-------------------|-----------|-----------|-----------|
-     Column Total |    58238  |     1457  |    59695  | 
-------------------|-----------|-----------|-----------|
-
- 
-Statistics for All Table Factors
-
-Pearson's Chi-squared test 
-------------------------------------------------------------
-Chi^2 =  1499.458     d.f. =  8     p =  1.758147e-318 
-
- 
-       Minimum expected frequency: 65.41184 
-
-```
+a. 0 cells (0.0%) have expected count less than 5. The minimum expected count is 65.41.
 
 ## Crosstabs 2024
 
-```
-CROSSTABS 2024 
-         
-             0    1
-  A        930   75
-  DT      8117  418
-  DT/GT    123   11
-  GF      2754  157
-  GF/GL    101    3
-  GL      3273  100
-  GT      5437  237
-  GT/DT    704   11
-  GT/GT_R   89    2
-  M         25    4
+**PARENT \* damaged Crosstabulation** -- Count, 2024 storm
 
-      A      DT   DT/GT      GF   GF/GL      GL      GT   GT/DT GT/GT_R       M 
-   1005    8535     134    2911     104    3373    5674     715      91      29 
-         
-               0      1
-  A       0.9254 0.0746
-  DT      0.9510 0.0490
-  DT/GT   0.9179 0.0821
-  GF      0.9461 0.0539
-  GF/GL   0.9712 0.0288
-  GL      0.9704 0.0296
-  GT      0.9582 0.0418
-  GT/DT   0.9846 0.0154
-  GT/GT_R 0.9780 0.0220
-  M       0.8621 0.1379
+| PARENT | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| A | 930 | 75 | 1005 |
+| DT | 8117 | 418 | 8535 |
+| DT/GT | 123 | 11 | 134 |
+| GF | 2754 | 157 | 2911 |
+| GF/GL | 101 | 3 | 104 |
+| GL | 3273 | 100 | 3373 |
+| GT | 5437 | 237 | 5674 |
+| GT/DT | 704 | 11 | 715 |
+| GT/GT_R | 89 | 2 | 91 |
+| M | 25 | 4 | 29 |
+| Total | 21553 | 1018 | 22571 |
 
-	Pearson's Chi-squared test
+**PARENT \* damaged Crosstabulation** -- Expected Count
 
-data:  mytable
-X-squared = 75.244, df = 9, p-value = 1.415e-12
+| PARENT | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| A | 959.7 | 45.3 | 1005.0 |
+| DT | 8150.1 | 384.9 | 8535.0 |
+| DT/GT | 128.0 | 6.0 | 134.0 |
+| GF | 2779.7 | 131.3 | 2911.0 |
+| GF/GL | 99.3 | 4.7 | 104.0 |
+| GL | 3220.9 | 152.1 | 3373.0 |
+| GT | 5418.1 | 255.9 | 5674.0 |
+| GT/DT | 682.8 | 32.2 | 715.0 |
+| GT/GT_R | 86.9 | 4.1 | 91.0 |
+| M | 27.7 | 1.3 | 29.0 |
+| Total | 21553.0 | 1018.0 | 22571.0 |
 
-   Cell Contents
-|-------------------------|
-|                   Count |
-|         Expected Values |
-|             Row Percent |
-|           Adj Std Resid |
-|-------------------------|
+**PARENT \* damaged Crosstabulation** -- Row Percent and Adjusted Residual
 
-Total Observations in Table:  22571 
+| PARENT | % damaged | Adjusted Residual (damaged) |
+|---|---:|---:|
+| A | 7.5% | 4.6 |
+| DT | 4.9% | 2.2 |
+| DT/GT | 8.2% | 2.1 |
+| GF | 5.4% | 2.5 |
+| GF/GL | 2.9% | -0.8 |
+| GL | 3.0% | -4.7 |
+| GT | 4.2% | -1.4 |
+| GT/DT | 1.5% | -3.9 |
+| GT/GT_R | 2.2% | -1.1 |
+| M | 13.8% | 2.4 |
 
-             | d$damaged 
-    d$PARENT |        0  |        1  | Row Total | 
--------------|-----------|-----------|-----------|
-           A |      930  |       75  |     1005  | 
-             |  959.672  |   45.328  |           | 
-             |   92.537% |    7.463% |    4.453% | 
-             |   -4.614  |    4.614  |           | 
--------------|-----------|-----------|-----------|
-          DT |     8117  |      418  |     8535  | 
-             | 8150.053  |  384.947  |           | 
-             |   95.103% |    4.897% |   37.814% | 
-             |   -2.186  |    2.186  |           | 
--------------|-----------|-----------|-----------|
-       DT/GT |      123  |       11  |      134  | 
-             |  127.956  |    6.044  |           | 
-             |   91.791% |    8.209% |    0.594% | 
-             |   -2.069  |    2.069  |           | 
--------------|-----------|-----------|-----------|
-          GF |     2754  |      157  |     2911  | 
-             | 2779.708  |  131.292  |           | 
-             |   94.607% |    5.393% |   12.897% | 
-             |   -2.460  |    2.460  |           | 
--------------|-----------|-----------|-----------|
-       GF/GL |      101  |        3  |      104  | 
-             |   99.309  |    4.691  |           | 
-             |   97.115% |    2.885% |    0.461% | 
-             |    0.801  |   -0.801  |           | 
--------------|-----------|-----------|-----------|
-          GL |     3273  |      100  |     3373  | 
-             | 3220.871  |  152.129  |           | 
-             |   97.035% |    2.965% |   14.944% | 
-             |    4.690  |   -4.690  |           | 
--------------|-----------|-----------|-----------|
-          GT |     5437  |      237  |     5674  | 
-             | 5418.091  |  255.909  |           | 
-             |   95.823% |    4.177% |   25.138% | 
-             |    1.398  |   -1.398  |           | 
--------------|-----------|-----------|-----------|
-       GT/DT |      704  |       11  |      715  | 
-             |  682.752  |   32.248  |           | 
-             |   98.462% |    1.538% |    3.168% | 
-             |    3.891  |   -3.891  |           | 
--------------|-----------|-----------|-----------|
-     GT/GT_R |       89  |        2  |       91  | 
-             |   86.896  |    4.104  |           | 
-             |   97.802% |    2.198% |    0.403% | 
-             |    1.065  |   -1.065  |           | 
--------------|-----------|-----------|-----------|
-           M |       25  |        4  |       29  | 
-             |   27.692  |    1.308  |           | 
-             |   86.207% |   13.793% |    0.128% | 
-             |   -2.410  |    2.410  |           | 
--------------|-----------|-----------|-----------|
-Column Total |    21553  |     1018  |    22571  | 
--------------|-----------|-----------|-----------|
+**Chi-Square Tests**
 
- 
-Statistics for All Table Factors
+| | Value | df | Asymptotic Significance (2-sided) |
+|---|---:|---:|---:|
+| Pearson Chi-Square | 75.244<sup>a</sup> | 9 | .000 |
+| Likelihood Ratio | 76.556 | 9 | .000 |
+| N of Valid Cases | 22571 | | |
 
-Pearson's Chi-squared test 
-------------------------------------------------------------
-Chi^2 =  75.24351     d.f. =  9     p =  1.414658e-12 
+a. 3 cells (15.0%) have expected count less than 5. The minimum expected count is 1.31.
 
- 
-       Minimum expected frequency: 1.307962 
-Cells with Expected Frequency < 5: 3 of 20 (15%)
+**HYDROGROUP \* damaged Crosstabulation** -- Count, 2024 storm
 
-           
-               0    1
-  A         2267  137
-  A/D        346   16
-  B         2877  166
-  B/D        776   48
-  C         3901  146
-  C/D       3330  190
-  D         7850  306
-  not rated  206    9
+| HYDROGROUP | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| A | 2267 | 137 | 2404 |
+| A/D | 346 | 16 | 362 |
+| B | 2877 | 166 | 3043 |
+| B/D | 776 | 48 | 824 |
+| C | 3901 | 146 | 4047 |
+| C/D | 3330 | 190 | 3520 |
+| D | 7850 | 306 | 8156 |
+| not rated | 206 | 9 | 215 |
+| Total | 21553 | 1018 | 22571 |
 
-        A       A/D         B       B/D         C       C/D         D not rated 
-     2404       362      3043       824      4047      3520      8156       215 
-           
-                 0      1
-  A         0.9430 0.0570
-  A/D       0.9558 0.0442
-  B         0.9454 0.0546
-  B/D       0.9417 0.0583
-  C         0.9639 0.0361
-  C/D       0.9460 0.0540
-  D         0.9625 0.0375
-  not rated 0.9581 0.0419
+**HYDROGROUP \* damaged Crosstabulation** -- Expected Count
 
-	Pearson's Chi-squared test
+| HYDROGROUP | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| A | 2295.6 | 108.4 | 2404.0 |
+| A/D | 345.7 | 16.3 | 362.0 |
+| B | 2905.8 | 137.2 | 3043.0 |
+| B/D | 786.8 | 37.2 | 824.0 |
+| C | 3864.5 | 182.5 | 4047.0 |
+| C/D | 3361.2 | 158.8 | 3520.0 |
+| D | 7788.1 | 367.9 | 8156.0 |
+| not rated | 205.3 | 9.7 | 215.0 |
+| Total | 21553.0 | 1018.0 | 22571.0 |
 
-data:  mytable
-X-squared = 42.548, df = 7, p-value = 4.078e-07
+**HYDROGROUP \* damaged Crosstabulation** -- Row Percent and Adjusted Residual
 
-   Cell Contents
-|-------------------------|
-|                   Count |
-|         Expected Values |
-|             Row Percent |
-|           Adj Std Resid |
-|-------------------------|
+| HYDROGROUP | % damaged | Adjusted Residual (damaged) |
+|---|---:|---:|
+| A | 5.7% | 3.0 |
+| A/D | 4.4% | -0.1 |
+| B | 5.5% | 2.7 |
+| B/D | 5.8% | 1.9 |
+| C | 3.6% | -3.1 |
+| C/D | 5.4% | 2.8 |
+| D | 3.8% | -4.1 |
+| not rated | 4.2% | -0.2 |
 
-Total Observations in Table:  22571 
+**Chi-Square Tests**
 
-             | d$damaged 
-d$HYDROGROUP |        0  |        1  | Row Total | 
--------------|-----------|-----------|-----------|
-           A |     2267  |      137  |     2404  | 
-             | 2295.574  |  108.426  |           | 
-             |   94.301% |    5.699% |   10.651% | 
-             |   -2.971  |    2.971  |           | 
--------------|-----------|-----------|-----------|
-         A/D |      346  |       16  |      362  | 
-             |  345.673  |   16.327  |           | 
-             |   95.580% |    4.420% |    1.604% | 
-             |    0.083  |   -0.083  |           | 
--------------|-----------|-----------|-----------|
-           B |     2877  |      166  |     3043  | 
-             | 2905.754  |  137.246  |           | 
-             |   94.545% |    5.455% |   13.482% | 
-             |   -2.700  |    2.700  |           | 
--------------|-----------|-----------|-----------|
-         B/D |      776  |       48  |      824  | 
-             |  786.836  |   37.164  |           | 
-             |   94.175% |    5.825% |    3.651% | 
-             |   -1.853  |    1.853  |           | 
--------------|-----------|-----------|-----------|
-           C |     3901  |      146  |     4047  | 
-             | 3864.472  |  182.528  |           | 
-             |   96.392% |    3.608% |   17.930% | 
-             |    3.054  |   -3.054  |           | 
--------------|-----------|-----------|-----------|
-         C/D |     3330  |      190  |     3520  | 
-             | 3361.241  |  158.759  |           | 
-             |   94.602% |    5.398% |   15.595% | 
-             |   -2.762  |    2.762  |           | 
--------------|-----------|-----------|-----------|
-           D |     7850  |      306  |     8156  | 
-             | 7788.147  |  367.853  |           | 
-             |   96.248% |    3.752% |   36.135% | 
-             |    4.130  |   -4.130  |           | 
--------------|-----------|-----------|-----------|
-   not rated |      206  |        9  |      215  | 
-             |  205.303  |    9.697  |           | 
-             |   95.814% |    4.186% |    0.953% | 
-             |    0.230  |   -0.230  |           | 
--------------|-----------|-----------|-----------|
-Column Total |    21553  |     1018  |    22571  | 
--------------|-----------|-----------|-----------|
+| | Value | df | Asymptotic Significance (2-sided) |
+|---|---:|---:|---:|
+| Pearson Chi-Square | 42.548<sup>a</sup> | 7 | .000 |
+| Likelihood Ratio | 42.127 | 7 | .000 |
+| N of Valid Cases | 22571 | | |
 
- 
-Statistics for All Table Factors
+a. 0 cells (0.0%) have expected count less than 5. The minimum expected count is 9.70.
 
-Pearson's Chi-squared test 
-------------------------------------------------------------
-Chi^2 =  42.5478     d.f. =  7     p =  4.077925e-07 
+**vtrans_district \* damaged Crosstabulation** -- Count, 2024 storm
 
- 
-       Minimum expected frequency: 9.696956 
+| vtrans_district | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| 3 | 137 | 0 | 137 |
+| 5 | 5267 | 231 | 5498 |
+| 6 | 5924 | 539 | 6463 |
+| 7 | 7034 | 209 | 7243 |
+| 8 | 174 | 0 | 174 |
+| 9 | 3017 | 39 | 3056 |
+| Total | 21553 | 1018 | 22571 |
 
-   
-       0    1
-  3  137    0
-  5 5267  231
-  6 5924  539
-  7 7034  209
-  8  174    0
-  9 3017   39
+**vtrans_district \* damaged Crosstabulation** -- Expected Count
 
-   3    5    6    7    8    9 
- 137 5498 6463 7243  174 3056 
-   
-         0      1
-  3 1.0000 0.0000
-  5 0.9580 0.0420
-  6 0.9166 0.0834
-  7 0.9711 0.0289
-  8 1.0000 0.0000
-  9 0.9872 0.0128
+| vtrans_district | 0 = not damaged | 1 = damaged | Total |
+|---|---:|---:|---:|
+| 3 | 130.8 | 6.2 | 137.0 |
+| 5 | 5250.0 | 248.0 | 5498.0 |
+| 6 | 6171.5 | 291.5 | 6463.0 |
+| 7 | 6916.3 | 326.7 | 7243.0 |
+| 8 | 166.2 | 7.8 | 174.0 |
+| 9 | 2918.2 | 137.8 | 3056.0 |
+| Total | 21553.0 | 1018.0 | 22571.0 |
 
-	Pearson's Chi-squared test
+**vtrans_district \* damaged Crosstabulation** -- Row Percent and Adjusted Residual
 
-data:  mytable
-X-squared = 354.59, df = 5, p-value < 2.2e-16
+| vtrans_district | % damaged | Adjusted Residual (damaged) |
+|---|---:|---:|
+| 3 | 0.0% | -2.6 |
+| 5 | 4.2% | -1.3 |
+| 6 | 8.3% | 17.6 |
+| 7 | 2.9% | -8.1 |
+| 8 | 0.0% | -2.9 |
+| 9 | 1.3% | -9.3 |
 
-   Cell Contents
-|-------------------------|
-|                   Count |
-|         Expected Values |
-|             Row Percent |
-|           Adj Std Resid |
-|-------------------------|
+**Chi-Square Tests**
 
-Total Observations in Table:  22571 
+| | Value | df | Asymptotic Significance (2-sided) |
+|---|---:|---:|---:|
+| Pearson Chi-Square | 354.591<sup>a</sup> | 5 | .000 |
+| Likelihood Ratio | 360.790 | 5 | .000 |
+| N of Valid Cases | 22571 | | |
 
-                  | d$damaged 
-d$vtrans_district |        0  |        1  | Row Total | 
-------------------|-----------|-----------|-----------|
-                3 |      137  |        0  |      137  | 
-                  |  130.821  |    6.179  |           | 
-                  |  100.000% |    0.000% |    0.607% | 
-                  |    2.552  |   -2.552  |           | 
-------------------|-----------|-----------|-----------|
-                5 |     5267  |      231  |     5498  | 
-                  | 5250.029  |  247.971  |           | 
-                  |   95.798% |    4.202% |   24.359% | 
-                  |    1.268  |   -1.268  |           | 
-------------------|-----------|-----------|-----------|
-                6 |     5924  |      539  |     6463  | 
-                  | 6171.505  |  291.495  |           | 
-                  |   91.660% |    8.340% |   28.634% | 
-                  |  -17.561  |   17.561  |           | 
-------------------|-----------|-----------|-----------|
-                7 |     7034  |      209  |     7243  | 
-                  | 6916.325  |  326.675  |           | 
-                  |   97.114% |    2.886% |   32.090% | 
-                  |    8.085  |   -8.085  |           | 
-------------------|-----------|-----------|-----------|
-                8 |      174  |        0  |      174  | 
-                  |  166.152  |    7.848  |           | 
-                  |  100.000% |    0.000% |    0.771% | 
-                  |    2.878  |   -2.878  |           | 
-------------------|-----------|-----------|-----------|
-                9 |     3017  |       39  |     3056  | 
-                  | 2918.168  |  137.832  |           | 
-                  |   98.724% |    1.276% |   13.539% | 
-                  |    9.265  |   -9.265  |           | 
-------------------|-----------|-----------|-----------|
-     Column Total |    21553  |     1018  |    22571  | 
-------------------|-----------|-----------|-----------|
-
- 
-Statistics for All Table Factors
-
-Pearson's Chi-squared test 
-------------------------------------------------------------
-Chi^2 =  354.5907     d.f. =  5     p =  1.79761e-74 
-
- 
-       Minimum expected frequency: 6.178991 
-
-```
+a. 0 cells (0.0%) have expected count less than 5. The minimum expected count is 6.18.
 
 ## Script: anova_spss_tables.R
 
