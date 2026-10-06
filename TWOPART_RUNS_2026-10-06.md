@@ -5,6 +5,71 @@ The selected model. Graded segments, Precip >= 3.51 in, Averill excluded. Damage
 ## Script: twopart_model.R
 
 ```r
+# twopart_model.R -- the selected two-part model: Part 1 logit (did the segment flood), Part 2 Gamma log-link
+#   (what it cost), then the avoided cost from recoding every compliant segment to Does Not Meet.
+# Set STORM to 2023 or 2024 and run from mrgp-roads-core:
+#   "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/twopart_model.R
+# Graded segments, Precip >= 3.51 in, Averill excluded; damage and cost from cost_dedup, uncapped; SEs clustered by town.
+
+STORM <- 2023
+
+library(glm2)
+library(sandwich)
+
+d <- read.csv(paste0("twopart_simple_2026-09-17/data/analysis_", STORM, "_2026-09-27.csv"))
+d <- d[d$Precip >= 3.51 & d$Town != "Averill", ]
+d$damaged   <- as.integer(d$cost_dedup > 0)
+d$compliant <- relevel(factor(d$compliant), ref = "Does Not Meet")
+
+# a district with no damaged segment cannot be estimated: pool it into the district with the most
+damaged_by_district <- tapply(d$damaged, d$vtrans_district, sum)
+busiest <- names(which.max(damaged_by_district))
+d$vtrans_district[d$vtrans_district %in% names(damaged_by_district)[damaged_by_district == 0]] <- busiest
+d$vtrans_district <- relevel(factor(d$vtrans_district), ref = busiest)
+
+cat("PART 1", STORM, " segments", nrow(d), " damaged", sum(d$damaged), " towns", length(unique(d$Town)), "\n")
+
+p1 <- glm(damaged ~ compliant + MeanSlope90m + StreamOrder + PARENT + HYDROGROUP + PercentImpervious_BaseLC_90m +
+            Precip + RoadGrade_mean_deg + Surface + Culvert_Any + Driveway_Count + Mean_TopoConvergence_30m +
+            vtrans_district + road_miles_municipal + grand_list_equalized_muni_100M,
+          family = binomial, data = d)
+print(summary(p1))
+
+se <- sqrt(diag(vcovCL(p1, cluster = d$Town, type = "HC1")))
+print(round(exp(cbind(odds_ratio = coef(p1), lo_95 = coef(p1) - 1.96 * se, hi_95 = coef(p1) + 1.96 * se)), 3))
+
+n1 <- sum(d$damaged); n0 <- sum(d$damaged == 0)
+cat("AUC\n"); print(round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 4))
+
+cat("PART 2", STORM, "\n")
+
+k <- d[d$damaged == 1, ]
+p2 <- glm2(cost_dedup ~ MeanSlope90m + StreamCrossing + StreamOrder + PARENT + K_final + HYDROGROUP +
+             PercentImpervious_BaseLC_90m + Precip + Surface + Culvert_Any + Driveway_Count + Mean_TopoConvergence_30m +
+             vtrans_district + road_miles_municipal + grand_list_equalized_muni_100M,
+           family = Gamma(link = "log"), data = k)
+print(summary(p2))
+
+se <- sqrt(diag(vcovCL(p2, cluster = k$Town, type = "HC1")))
+print(round(exp(cbind(cost_ratio = coef(p2), lo_95 = coef(p2) - 1.96 * se, hi_95 = coef(p2) + 1.96 * se)), 3))
+
+cat("deviance R2\n"); print(round(1 - p2$deviance / p2$null.deviance, 4))
+
+cat("AVOIDED COST", STORM, "\n")
+
+d0 <- d
+d0$compliant <- factor("Does Not Meet", levels = levels(d$compliant))
+p_observed <- predict(p1, newdata = d,  type = "response")   # probability of damage as rated
+p_recoded  <- predict(p1, newdata = d0, type = "response")   # probability if rated Does Not Meet
+cost       <- predict(p2, newdata = d,  type = "response")   # predicted repair cost
+avoided    <- (p_recoded - p_observed) * cost
+compliant  <- d$compliant == "Compliant"
+
+cat("compliant segments recoded\n");  print(sum(compliant))
+cat("statewide avoided cost\n");      print(round(sum(avoided[compliant])))
+cat("ten sample towns\n")
+print(round(tapply(avoided[compliant], d$Town[compliant], sum)[c("Brattleboro", "Corinth", "Wallingford", "Hardwick",
+      "West Windsor", "Wolcott", "Washington", "Richmond", "Stamford", "Starksboro")]))
 ```
 
 ## Output 2023
@@ -414,6 +479,85 @@ The same model on only the towns that hold both a FEMA and a VTrans damage recor
 ## Script: both_source_towns.R
 
 ```r
+# both_source_towns.R -- the selected two-part model on the towns that hold BOTH a FEMA and a VTrans damage record,
+#   fitted on the pooled de-duplicated cost (OUTCOME = "cost_dedup") or on the VTrans records alone ("vt_cost").
+#   Same towns, same segments, same terms either way, so the two runs are comparable.
+# Set STORM and OUTCOME and run from mrgp-roads-core:
+#   "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/both_source_towns.R
+# Graded segments, Precip >= 3.51 in, Averill excluded; uncapped cost; SEs clustered by town.
+
+STORM   <- 2023
+OUTCOME <- "cost_dedup"      # "cost_dedup" = FEMA + VTrans pooled and de-duplicated; "vt_cost" = VTrans only
+
+library(glm2)
+library(sandwich)
+
+d <- read.csv(paste0("twopart_simple_2026-09-17/data/analysis_", STORM, "_2026-09-27.csv"))
+d <- d[d$Precip >= 3.51 & d$Town != "Averill", ]
+
+fema_towns <- unique(d$Town[d$fema_cost > 0])
+vt_towns   <- unique(d$Town[d$vt_cost > 0])
+d <- d[d$Town %in% intersect(fema_towns, vt_towns), ]
+
+d$damaged   <- as.integer(d[[OUTCOME]] > 0)
+d$cost      <- d[[OUTCOME]]
+d$compliant <- relevel(factor(d$compliant), ref = "Does Not Meet")
+
+# a category with no damaged segment cannot be estimated: pool it into the category with the most
+n <- tapply(d$damaged, d$vtrans_district, sum)
+d$vtrans_district[d$vtrans_district %in% names(n)[n == 0]] <- names(which.max(n))
+d$vtrans_district <- relevel(factor(d$vtrans_district), ref = names(which.max(n)))
+n <- tapply(d$damaged, d$PARENT, sum)
+d$PARENT[d$PARENT %in% names(n)[n == 0]] <- names(which.max(n))
+d$PARENT <- factor(d$PARENT)
+n <- tapply(d$damaged, d$HYDROGROUP, sum)
+d$HYDROGROUP[d$HYDROGROUP %in% names(n)[n == 0]] <- names(which.max(n))
+d$HYDROGROUP <- factor(d$HYDROGROUP)
+
+cat("BOTH-SOURCE TOWNS", STORM, OUTCOME, "\n")
+cat("towns\n");                      print(length(unique(d$Town)))
+cat("segments\n");                   print(nrow(d))
+cat("damaged\n");                    print(sum(d$damaged))
+cat("total cost\n");                 print(sum(d$cost))
+
+cat("PART 1\n")
+p1 <- glm(damaged ~ compliant + MeanSlope90m + StreamOrder + PARENT + HYDROGROUP + PercentImpervious_BaseLC_90m +
+            Precip + RoadGrade_mean_deg + Surface + Culvert_Any + Driveway_Count + Mean_TopoConvergence_30m +
+            vtrans_district + road_miles_municipal + grand_list_equalized_muni_100M,
+          family = binomial, data = d)
+print(summary(p1))
+se <- sqrt(diag(vcovCL(p1, cluster = d$Town, type = "HC1")))[["compliantCompliant"]]
+b  <- coef(p1)[["compliantCompliant"]]
+cat("compliance odds ratio, clustered 95%\n"); print(round(exp(c(odds_ratio = b, lo = b - 1.96 * se, hi = b + 1.96 * se)), 3))
+n1 <- sum(d$damaged); n0 <- sum(d$damaged == 0)
+cat("AUC\n"); print(round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 4))
+
+cat("PART 2\n")
+k <- d[d$damaged == 1, ]
+p2 <- glm2(cost ~ MeanSlope90m + StreamCrossing + StreamOrder + PARENT + K_final + HYDROGROUP +
+             PercentImpervious_BaseLC_90m + Precip + Surface + Culvert_Any + Driveway_Count + Mean_TopoConvergence_30m +
+             vtrans_district + road_miles_municipal + grand_list_equalized_muni_100M,
+           family = Gamma(link = "log"), data = k)
+print(summary(p2))
+cat("deviance R2\n"); print(round(1 - p2$deviance / p2$null.deviance, 4))
+
+cat("AVOIDED COST\n")
+d0 <- d
+d0$compliant <- factor("Does Not Meet", levels = levels(d$compliant))
+avoided   <- (predict(p1, newdata = d0, type = "response") - predict(p1, newdata = d, type = "response")) *
+             predict(p2, newdata = d, type = "response")
+compliant <- d$compliant == "Compliant"
+cat("compliant segments recoded\n");  print(sum(compliant))
+cat("avoided cost, these towns\n");   print(round(sum(avoided[compliant])))
+cat("study towns\n")
+print(round(tapply(avoided[compliant], d$Town[compliant], sum)[c("Brattleboro", "Corinth", "Wallingford", "Hardwick",
+      "West Windsor", "Wolcott", "Washington", "Richmond", "Stamford", "Starksboro")]))
+
+cat("SUMMARY", STORM, OUTCOME, "\n")
+print(c(towns = length(unique(d$Town)), damaged = sum(d$damaged), odds_ratio = round(exp(b), 3),
+        lo = round(exp(b - 1.96 * se), 3), hi = round(exp(b + 1.96 * se), 3),
+        AUC = round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 3),
+        dev_r2 = round(1 - p2$deviance / p2$null.deviance, 3), avoided = round(sum(avoided[compliant]))))
 ```
 
 ## Summary of the four runs
