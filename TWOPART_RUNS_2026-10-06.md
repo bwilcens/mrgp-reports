@@ -2,13 +2,13 @@
 
 The selected model. Graded segments, Precip >= 3.51 in, Averill excluded. Damage and cost = cost_dedup from analysis_{storm}_2026-09-27.csv, uncapped. Standard errors clustered by town. Script run once with STORM = 2023 and once with STORM = 2024.
 
-## Script: R/115_twopart_simple.R
+## Script: twopart_model.R
 
 ```r
-# 115_twopart_simple.R -- the selected two-part model: Part 1 logit (did the segment flood), Part 2 Gamma log-link
+# twopart_model.R -- the selected two-part model: Part 1 logit (did the segment flood), Part 2 Gamma log-link
 #   (what it cost), then the avoided cost from recoding every compliant segment to Does Not Meet.
 # Set STORM to 2023 or 2024 and run from mrgp-roads-core:
-#   "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/115_twopart_simple.R
+#   "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/twopart_model.R
 # Graded segments, Precip >= 3.51 in, Averill excluded; damage and cost from cost_dedup, uncapped; SEs clustered by town.
 
 STORM <- 2023

@@ -2,12 +2,12 @@
 
 Graded segments, Precip >= 3.51 in, Averill excluded. Damage and cost = cost_dedup from analysis_{storm}_2026-09-27.csv, uncapped. Each script run once with STORM = 2023 and once with STORM = 2024.
 
-## Script: R/114_crosstab_anova_simple.R
+## Script: crosstab_anova.R
 
 ```r
-# 114_crosstab_anova_simple.R -- crosstab of each category against damage, then ANOVA of ln(cost) by category.
+# crosstab_anova.R -- crosstab of each category against damage, then ANOVA of ln(cost) by category.
 # Set STORM to 2023 or 2024 and run from mrgp-roads-core:
-#   "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/114_crosstab_anova_simple.R
+#   "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/crosstab_anova.R
 # Graded segments, Precip >= 3.51 in, Averill excluded; damage and cost from cost_dedup, uncapped.
 
 STORM <- 2023
@@ -370,12 +370,12 @@ P value adjustment method: bonferroni
 
 ## Plots: mean ln(cost) +/- 2 SE by category
 
-### Script: R/116_category_errorbars.R
+### Script: category_errorbars.R
 
 ```r
-# 116_category_errorbars.R -- mean ln(cost) +/- 2 standard errors for each category of parent material,
+# category_errorbars.R -- mean ln(cost) +/- 2 standard errors for each category of parent material,
 #   hydrologic group and VTrans district, both storms, on the damaged segments the ANOVA uses.
-# RUN from mrgp-roads-core: "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/116_category_errorbars.R
+# RUN from mrgp-roads-core: "C:/Program Files/R/R-4.5.3/bin/Rscript.exe" twopart_simple_2026-09-17/R/category_errorbars.R
 # Graded segments, Precip >= 3.51 in, Averill excluded; cost_dedup, uncapped. Writes figures/category_errorbars_2026-10-06.png
 
 png("twopart_simple_2026-09-17/figures/category_errorbars_2026-10-06.png", width = 2400, height = 2700, res = 200)
