@@ -36,7 +36,6 @@ roads$compliant <- relevel(factor(roads$compliant), ref = "Does Not Meet")
 # the model, written once
 PART1 <- "compliant + parent_A + parent_DT + parent_GL + parent_GT_DT + hydro_B + MeanSlope90m + StreamOrder + PercentImpervious_BaseLC_90m + Precip + RoadGrade_mean_deg + Surface + Culvert_Any + Driveway_Count + Mean_TopoConvergence_30m + vtrans_district + road_miles_municipal + grand_list_equalized_muni_100M"
 PART2 <- "parent_till + MeanSlope90m + StreamCrossing + StreamOrder + K_final + PercentImpervious_BaseLC_90m + Precip + Surface + Culvert_Any + Driveway_Count + Mean_TopoConvergence_30m + vtrans_district + road_miles_municipal + grand_list_equalized_muni_100M"
-SHOW  <- c("compliantCompliant", "parent_A", "parent_DT", "parent_GL", "parent_GT_DT", "hydro_B")   # the rows to print
 
 cat("--- Segments ---\n");            print(nrow(roads))
 cat("--- Towns ---\n");               print(length(unique(roads$Town)))
@@ -59,16 +58,21 @@ cat("damaged segments:", sum(d$damaged), "  total cost:", format(sum(k$cost), bi
 # Part 1 -- did the segment flood?
 p1 <- glm(as.formula(paste("damaged ~", PART1)), family = binomial, data = d)
 se <- sqrt(diag(vcovCL(p1, cluster = d$Town, type = "HC1")))
-cat("\nPart 1: odds ratios with town-clustered 95% intervals (compliance and the indicators)\n")
-print(round(exp(cbind(odds_ratio = coef(p1), lo_95 = coef(p1) - 1.96 * se, hi_95 = coef(p1) + 1.96 * se))[SHOW, ], 3))
+# Every term: B is the coefficient on the log-odds scale (SPSS's B column), Exp(B) is the odds
+# ratio (SPSS's Exp(B)); the interval is built on B with the clustered SE and then exponentiated.
+cat("\nPart 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
+print(round(cbind(B = coef(p1), SE_clustered = se, Exp_B = exp(coef(p1)),
+                  lo_95 = exp(coef(p1) - 1.96 * se), hi_95 = exp(coef(p1) + 1.96 * se)), 3))
 n1 <- sum(d$damaged); n0 <- sum(d$damaged == 0)
 cat("AUC:", round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 4), "\n")
 
 # Part 2 -- what did it cost?
 p2 <- glm2(as.formula(paste("cost ~", PART2)), family = Gamma(link = "log"), data = k)
 se2 <- sqrt(diag(vcovCL(p2, cluster = k$Town, type = "HC1")))
-cat("\nPart 2: cost ratio for the till indicator, clustered 95%\n")
-print(round(exp(c(cost_ratio = coef(p2)[["parent_till"]], lo_95 = coef(p2)[["parent_till"]] - 1.96 * se2[["parent_till"]], hi_95 = coef(p2)[["parent_till"]] + 1.96 * se2[["parent_till"]])), 3))
+# Every term: B is the coefficient on the log-cost scale, Exp(B) is the cost ratio (1.20 = 20% higher cost)
+cat("\nPart 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
+print(round(cbind(B = coef(p2), SE_clustered = se2, Exp_B = exp(coef(p2)),
+                  lo_95 = exp(coef(p2) - 1.96 * se2), hi_95 = exp(coef(p2) + 1.96 * se2)), 3))
 cat("deviance R2:", round(1 - p2$deviance / p2$null.deviance, 4), "\n")
 
 # Avoided cost -- recode every compliant segment to Does Not Meet
@@ -124,11 +128,16 @@ f1 <- paste("damaged ~ compliant +", paste(ind, collapse = " + "), "+ MeanSlope9
 
 p1 <- glm(as.formula(f1), family = binomial, data = d)
 se <- sqrt(diag(vcovCL(p1, cluster = d$Town, type = "HC1")))
-cat("\nPart 1: odds ratios with clustered 95% intervals\n")
-print(round(exp(cbind(odds_ratio = coef(p1), lo_95 = coef(p1) - 1.96 * se, hi_95 = coef(p1) + 1.96 * se))[c("compliantCompliant", ind), ], 3))
+cat("\nPart 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
+print(round(cbind(B = coef(p1), SE_clustered = se, Exp_B = exp(coef(p1)),
+                  lo_95 = exp(coef(p1) - 1.96 * se), hi_95 = exp(coef(p1) + 1.96 * se)), 3))
 n1 <- sum(d$damaged); n0 <- sum(d$damaged == 0)
 cat("AUC:", round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 4), "\n")
 p2 <- glm2(as.formula(paste("cost ~", PART2)), family = Gamma(link = "log"), data = k)
+se2 <- sqrt(diag(vcovCL(p2, cluster = k$Town, type = "HC1")))
+cat("\nPart 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
+print(round(cbind(B = coef(p2), SE_clustered = se2, Exp_B = exp(coef(p2)),
+                  lo_95 = exp(coef(p2) - 1.96 * se2), hi_95 = exp(coef(p2) + 1.96 * se2)), 3))
 cat("Part 2 deviance R2:", round(1 - p2$deviance / p2$null.deviance, 4), "\n")
 
 d0 <- d; d0$compliant <- factor("Does Not Meet", levels = levels(d$compliant))
@@ -170,11 +179,16 @@ f1 <- paste("damaged ~ compliant +", paste(ind, collapse = " + "), "+ MeanSlope9
 
 p1 <- glm(as.formula(f1), family = binomial, data = d)
 se <- sqrt(diag(vcovCL(p1, cluster = d$Town, type = "HC1")))
-cat("\nPart 1: odds ratios with clustered 95% intervals\n")
-print(round(exp(cbind(odds_ratio = coef(p1), lo_95 = coef(p1) - 1.96 * se, hi_95 = coef(p1) + 1.96 * se))[c("compliantCompliant", ind), ], 3))
+cat("\nPart 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
+print(round(cbind(B = coef(p1), SE_clustered = se, Exp_B = exp(coef(p1)),
+                  lo_95 = exp(coef(p1) - 1.96 * se), hi_95 = exp(coef(p1) + 1.96 * se)), 3))
 n1 <- sum(d$damaged); n0 <- sum(d$damaged == 0)
 cat("AUC:", round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 4), "\n")
 p2 <- glm2(as.formula(paste("cost ~", PART2)), family = Gamma(link = "log"), data = k)
+se2 <- sqrt(diag(vcovCL(p2, cluster = k$Town, type = "HC1")))
+cat("\nPart 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
+print(round(cbind(B = coef(p2), SE_clustered = se2, Exp_B = exp(coef(p2)),
+                  lo_95 = exp(coef(p2) - 1.96 * se2), hi_95 = exp(coef(p2) + 1.96 * se2)), 3))
 cat("Part 2 deviance R2:", round(1 - p2$deviance / p2$null.deviance, 4), "\n")
 
 d0 <- d; d0$compliant <- factor("Does Not Meet", levels = levels(d$compliant))
