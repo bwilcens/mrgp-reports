@@ -1,38 +1,24 @@
 # Two-Part Model with Indicators, by Damage Record Source
 
-Parent material and hydrologic group enter as the 0/1 indicators chosen from the crosstab and ANOVA; VTrans district stays as a factor. The model is fitted statewide, then on the towns that hold both FEMA and VTrans records with damage counted from the pooled de-duplicated records (run A) and from the VTrans records alone (run B), and the three runs are put side by side. Every coefficient is shown as B with its clustered SE and as Exp(B) with its interval. Script run once with STORM = 2023 and once with STORM = 2024.
+The approach mirrors Dr. Wemple's homework assignment on logistic regression.
 
 ## Script: twopart_sources.R
 
 ```r
-# =============================================================================
-# The two-part model with indicator variables, and what changes with the damage record source
-#
 # Data:  ../mrgp-roads-core/twopart_simple_2026-09-17/data/analysis_<STORM>_2026-09-27.csv
 #        one row per road segment; compliance-graded segments with at least 3.51 in of rain,
 #        Averill excluded; damage and cost from cost_dedup (FEMA and VTrans, de-duplicated)
 #        or from vt_cost (VTrans records alone)
-#
-# Parent material and hydrologic group enter as 0/1 indicators chosen from the crosstab and ANOVA:
-#   occurrence model: parent_A, parent_DT, parent_GL, parent_GT_DT, hydro_B
-#   cost model:       parent_till (dense till or ablation till)
-# Every other category is the baseline. VTrans district stays as a factor: it marks where the storm
-# went, and without it the compliance effect absorbs the storm's path.
-#
-# STEP 1 fits the model statewide. STEPs 2 and 3 fit it on the towns that hold both a FEMA and a
-# VTrans record, once counting damage from the pooled records and once from VTrans alone -- same
-# segments, same terms, so the difference is the record source. STEP 4 puts the runs side by side.
-#
-# Run one line at a time with Ctrl+Enter. Set STORM to 2023 or 2024. Nothing is written to disk.
-# =============================================================================
+#        indicators from the crosstab and anova: parent_A, parent_DT, parent_GL, parent_GT_DT,
+#        hydro_B (occurrence side); parent_till (cost side); every other category is the baseline
 
 
 # -----------------------------------------------------------------------------
-# STEP 0.  Read the data
+# step 0  read the data
 # -----------------------------------------------------------------------------
 STORM <- 2023
 
-library(glm2)        # a steadier fitting routine for the Gamma model
+library(glm2)        # steadier fitting for the gamma model
 library(sandwich)    # town-clustered standard errors
 
 if (!dir.exists("data") && dir.exists("../data")) setwd("..")
@@ -40,19 +26,19 @@ roads <- read.csv(paste0("../mrgp-roads-core/twopart_simple_2026-09-17/data/anal
 roads <- roads[roads$Precip >= 3.51 & roads$Town != "Averill", ]
 roads$compliant <- relevel(factor(roads$compliant), ref = "Does Not Meet")
 
-# the model, written once
+# the model, written once; district stays as a factor
 PART1 <- "compliant + parent_A + parent_DT + parent_GL + parent_GT_DT + hydro_B + MeanSlope90m + StreamOrder + PercentImpervious_BaseLC_90m + Precip + RoadGrade_mean_deg + Surface + Culvert_Any + Driveway_Count + Mean_TopoConvergence_30m + vtrans_district + road_miles_municipal + grand_list_equalized_muni_100M"
 PART2 <- "parent_till + MeanSlope90m + StreamCrossing + StreamOrder + K_final + PercentImpervious_BaseLC_90m + Precip + Surface + Culvert_Any + Driveway_Count + Mean_TopoConvergence_30m + vtrans_district + road_miles_municipal + grand_list_equalized_muni_100M"
 
-cat("--- Segments ---\n");            print(nrow(roads))
-cat("--- Towns ---\n");               print(length(unique(roads$Town)))
-cat("--- Compliance status ---\n");   print(table(roads$compliant))
+cat("segments\n");           print(nrow(roads))
+cat("towns\n");              print(length(unique(roads$Town)))
+cat("compliance status\n");  print(table(roads$compliant))
 
 
 # -----------------------------------------------------------------------------
-# STEP 1.  Statewide, pooled de-duplicated records
+# step 1  statewide, pooled de-duplicated records
 # -----------------------------------------------------------------------------
-cat("=== STEP 1: statewide ===\n\n")
+cat("step 1 statewide\n\n")
 d <- roads
 d$damaged <- as.integer(d$cost_dedup > 0)
 d$cost    <- d$cost_dedup
@@ -62,34 +48,33 @@ d$vtrans_district <- relevel(factor(d$vtrans_district), ref = names(which.max(n)
 k <- d[d$damaged == 1, ]
 cat("damaged segments:", sum(d$damaged), "  total cost:", format(sum(k$cost), big.mark = ","), "\n")
 
-# Part 1 -- did the segment flood?
+# part 1  did the segment flood
 p1 <- glm(as.formula(paste("damaged ~", PART1)), family = binomial, data = d)
 se <- sqrt(diag(vcovCL(p1, cluster = d$Town, type = "HC1")))
-# Every term: B is the coefficient on the log-odds scale (SPSS's B column), Exp(B) is the odds
-# ratio (SPSS's Exp(B)); the interval is built on B with the clustered SE and then exponentiated.
-cat("\nPart 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
+# B is the log-odds coefficient, Exp(B) the odds ratio; the interval is built on B then exponentiated
+cat("\npart 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
 print(round(cbind(B = coef(p1), SE_clustered = se, Exp_B = exp(coef(p1)),
                   lo_95 = exp(coef(p1) - 1.96 * se), hi_95 = exp(coef(p1) + 1.96 * se)), 3))
 n1 <- sum(d$damaged); n0 <- sum(d$damaged == 0)
 cat("AUC:", round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 4), "\n")
 
-# Part 2 -- what did it cost?
+# part 2  what did it cost
 p2 <- glm2(as.formula(paste("cost ~", PART2)), family = Gamma(link = "log"), data = k)
 se2 <- sqrt(diag(vcovCL(p2, cluster = k$Town, type = "HC1")))
-# Every term: B is the coefficient on the log-cost scale, Exp(B) is the cost ratio (1.20 = 20% higher cost)
-cat("\nPart 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
+# B is the log-cost coefficient, Exp(B) the cost ratio (1.20 = 20% higher cost)
+cat("\npart 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
 print(round(cbind(B = coef(p2), SE_clustered = se2, Exp_B = exp(coef(p2)),
                   lo_95 = exp(coef(p2) - 1.96 * se2), hi_95 = exp(coef(p2) + 1.96 * se2)), 3))
 cat("deviance R2:", round(1 - p2$deviance / p2$null.deviance, 4), "\n")
 
-# Avoided cost -- recode every compliant segment to Does Not Meet
+# avoided cost  recode every compliant segment to does not meet
 d0 <- d; d0$compliant <- factor("Does Not Meet", levels = levels(d$compliant))
 p_rated <- predict(p1, newdata = d,  type = "response")
 p_dnm   <- predict(p1, newdata = d0, type = "response")
 cost_hat <- predict(p2, newdata = d, type = "response")
 avoided <- (p_dnm - p_rated) * cost_hat
 cc <- d$compliant == "Compliant"
-# its town-clustered standard error: delta method with the joint sandwich of both parts
+# town-clustered standard error: delta method with the joint sandwich of both parts
 k1 <- names(coef(p1)); k2 <- names(coef(p2))
 X1 <- model.matrix(delete.response(terms(p1)), d, xlev = p1$xlevels)[, k1]; X0 <- model.matrix(delete.response(terms(p1)), d0, xlev = p1$xlevels)[, k1]
 Z  <- model.matrix(delete.response(terms(p2)), d, xlev = p2$xlevels)[, k2]
@@ -100,7 +85,7 @@ U1 <- matrix(0, length(tw), length(k1), dimnames = list(tw, k1)); s1 <- rowsum(e
 U2 <- matrix(0, length(tw), length(k2), dimnames = list(tw, k2)); s2 <- rowsum(estfun(p2), k$Town); U2[rownames(s2), ] <- s2
 G1 <- length(tw); G2 <- length(unique(k$Town)); a1 <- G1 / (G1 - 1) * (nrow(d) - 1) / (nrow(d) - length(k1)); a2 <- G2 / (G2 - 1) * (nrow(k) - 1) / (nrow(k) - length(k2))
 V  <- crossprod(cbind(sqrt(a1) * U1 %*% B1, sqrt(a2) * U2 %*% B2)); se_av <- sqrt(drop(t(h) %*% V %*% h))
-cat("\nAvoided cost statewide:", format(round(sum(avoided[cc])), big.mark = ","),
+cat("\navoided cost statewide:", format(round(sum(avoided[cc])), big.mark = ","),
     " clustered 95%:", format(round(sum(avoided[cc]) - 1.96 * se_av), big.mark = ","), "to", format(round(sum(avoided[cc]) + 1.96 * se_av), big.mark = ","), "\n")
 cat("as a share of the observed damage cost:", round(100 * sum(avoided[cc]) / sum(k$cost), 1), "%\n")
 cat("ten sample towns (NA = not in this storm's exposed population):\n")
@@ -111,11 +96,10 @@ state <- c(segments = nrow(d), damaged = sum(d$damaged), odds_ratio = exp(coef(p
 
 
 # -----------------------------------------------------------------------------
-# STEP 2.  Both-source towns, run A: damage from the pooled de-duplicated records
+# step 2  both-source towns, run A: damage from the pooled de-duplicated records
 # -----------------------------------------------------------------------------
-# Only the towns with at least one FEMA-recorded and one VTrans-recorded damage, so that run B
-# below uses exactly the same segments.
-cat("\n=== STEP 2: both-source towns, pooled records ===\n\n")
+# only the towns with at least one FEMA-recorded and one VTrans-recorded damage, so run B uses the same segments
+cat("\nstep 2 both-source towns, pooled records\n\n")
 both <- roads[roads$Town %in% intersect(unique(roads$Town[roads$fema_cost > 0]), unique(roads$Town[roads$vt_cost > 0])), ]
 cat("towns:", length(unique(both$Town)), "  segments:", nrow(both), "\n")
 
@@ -135,17 +119,17 @@ f1 <- paste("damaged ~ compliant +", paste(ind, collapse = " + "), "+ MeanSlope9
 
 p1 <- glm(as.formula(f1), family = binomial, data = d)
 se <- sqrt(diag(vcovCL(p1, cluster = d$Town, type = "HC1")))
-cat("\nPart 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
+cat("\npart 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
 print(round(cbind(B = coef(p1), SE_clustered = se, Exp_B = exp(coef(p1)),
                   lo_95 = exp(coef(p1) - 1.96 * se), hi_95 = exp(coef(p1) + 1.96 * se)), 3))
 n1 <- sum(d$damaged); n0 <- sum(d$damaged == 0)
 cat("AUC:", round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 4), "\n")
 p2 <- glm2(as.formula(paste("cost ~", PART2)), family = Gamma(link = "log"), data = k)
 se2 <- sqrt(diag(vcovCL(p2, cluster = k$Town, type = "HC1")))
-cat("\nPart 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
+cat("\npart 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
 print(round(cbind(B = coef(p2), SE_clustered = se2, Exp_B = exp(coef(p2)),
                   lo_95 = exp(coef(p2) - 1.96 * se2), hi_95 = exp(coef(p2) + 1.96 * se2)), 3))
-cat("Part 2 deviance R2:", round(1 - p2$deviance / p2$null.deviance, 4), "\n")
+cat("deviance R2:", round(1 - p2$deviance / p2$null.deviance, 4), "\n")
 
 d0 <- d; d0$compliant <- factor("Does Not Meet", levels = levels(d$compliant))
 p_rated <- predict(p1, newdata = d, type = "response"); p_dnm <- predict(p1, newdata = d0, type = "response"); cost_hat <- predict(p2, newdata = d, type = "response")
@@ -158,7 +142,7 @@ tw <- sort(unique(d$Town)); U1 <- matrix(0, length(tw), length(k1), dimnames = l
 U2 <- matrix(0, length(tw), length(k2), dimnames = list(tw, k2)); s2 <- rowsum(estfun(p2), k$Town); U2[rownames(s2), ] <- s2
 G1 <- length(tw); G2 <- length(unique(k$Town)); a1 <- G1 / (G1 - 1) * (nrow(d) - 1) / (nrow(d) - length(k1)); a2 <- G2 / (G2 - 1) * (nrow(k) - 1) / (nrow(k) - length(k2))
 V  <- crossprod(cbind(sqrt(a1) * U1 %*% B1, sqrt(a2) * U2 %*% B2)); se_av <- sqrt(drop(t(h) %*% V %*% h))
-cat("\nAvoided cost, these towns:", format(round(sum(avoided[cc])), big.mark = ","), " clustered 95%:", format(round(sum(avoided[cc]) - 1.96 * se_av), big.mark = ","), "to", format(round(sum(avoided[cc]) + 1.96 * se_av), big.mark = ","), "\n")
+cat("\navoided cost, these towns:", format(round(sum(avoided[cc])), big.mark = ","), " clustered 95%:", format(round(sum(avoided[cc]) - 1.96 * se_av), big.mark = ","), "to", format(round(sum(avoided[cc]) + 1.96 * se_av), big.mark = ","), "\n")
 cat("as a share of the observed damage cost:", round(100 * sum(avoided[cc]) / sum(k$cost), 1), "%\n")
 runA <- c(segments = nrow(d), damaged = sum(d$damaged), odds_ratio = exp(coef(p1)[["compliantCompliant"]]),
           lo = exp(coef(p1)[["compliantCompliant"]] - 1.96 * se[["compliantCompliant"]]), hi = exp(coef(p1)[["compliantCompliant"]] + 1.96 * se[["compliantCompliant"]]),
@@ -166,11 +150,10 @@ runA <- c(segments = nrow(d), damaged = sum(d$damaged), odds_ratio = exp(coef(p1
 
 
 # -----------------------------------------------------------------------------
-# STEP 3.  Both-source towns, run B: damage from the VTrans records alone
+# step 3  both-source towns, run B: damage from the VTrans records alone
 # -----------------------------------------------------------------------------
-# The same lines as STEP 2 with vt_cost in place of cost_dedup. A segment that only FEMA recorded
-# counts as undamaged here.
-cat("\n=== STEP 3: both-source towns, VTrans records only ===\n\n")
+# the same lines as step 2 with vt_cost in place of cost_dedup; a segment only FEMA recorded counts as undamaged
+cat("\nstep 3 both-source towns, VTrans records only\n\n")
 d <- both
 d$damaged <- as.integer(d$vt_cost > 0)
 d$cost    <- d$vt_cost
@@ -186,17 +169,17 @@ f1 <- paste("damaged ~ compliant +", paste(ind, collapse = " + "), "+ MeanSlope9
 
 p1 <- glm(as.formula(f1), family = binomial, data = d)
 se <- sqrt(diag(vcovCL(p1, cluster = d$Town, type = "HC1")))
-cat("\nPart 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
+cat("\npart 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval\n")
 print(round(cbind(B = coef(p1), SE_clustered = se, Exp_B = exp(coef(p1)),
                   lo_95 = exp(coef(p1) - 1.96 * se), hi_95 = exp(coef(p1) + 1.96 * se)), 3))
 n1 <- sum(d$damaged); n0 <- sum(d$damaged == 0)
 cat("AUC:", round((sum(rank(fitted(p1))[d$damaged == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0), 4), "\n")
 p2 <- glm2(as.formula(paste("cost ~", PART2)), family = Gamma(link = "log"), data = k)
 se2 <- sqrt(diag(vcovCL(p2, cluster = k$Town, type = "HC1")))
-cat("\nPart 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
+cat("\npart 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval\n")
 print(round(cbind(B = coef(p2), SE_clustered = se2, Exp_B = exp(coef(p2)),
                   lo_95 = exp(coef(p2) - 1.96 * se2), hi_95 = exp(coef(p2) + 1.96 * se2)), 3))
-cat("Part 2 deviance R2:", round(1 - p2$deviance / p2$null.deviance, 4), "\n")
+cat("deviance R2:", round(1 - p2$deviance / p2$null.deviance, 4), "\n")
 
 d0 <- d; d0$compliant <- factor("Does Not Meet", levels = levels(d$compliant))
 p_rated <- predict(p1, newdata = d, type = "response"); p_dnm <- predict(p1, newdata = d0, type = "response"); cost_hat <- predict(p2, newdata = d, type = "response")
@@ -209,7 +192,7 @@ tw <- sort(unique(d$Town)); U1 <- matrix(0, length(tw), length(k1), dimnames = l
 U2 <- matrix(0, length(tw), length(k2), dimnames = list(tw, k2)); s2 <- rowsum(estfun(p2), k$Town); U2[rownames(s2), ] <- s2
 G1 <- length(tw); G2 <- length(unique(k$Town)); a1 <- G1 / (G1 - 1) * (nrow(d) - 1) / (nrow(d) - length(k1)); a2 <- G2 / (G2 - 1) * (nrow(k) - 1) / (nrow(k) - length(k2))
 V  <- crossprod(cbind(sqrt(a1) * U1 %*% B1, sqrt(a2) * U2 %*% B2)); se_av <- sqrt(drop(t(h) %*% V %*% h))
-cat("\nAvoided cost, these towns:", format(round(sum(avoided[cc])), big.mark = ","), " clustered 95%:", format(round(sum(avoided[cc]) - 1.96 * se_av), big.mark = ","), "to", format(round(sum(avoided[cc]) + 1.96 * se_av), big.mark = ","), "\n")
+cat("\navoided cost, these towns:", format(round(sum(avoided[cc])), big.mark = ","), " clustered 95%:", format(round(sum(avoided[cc]) - 1.96 * se_av), big.mark = ","), "to", format(round(sum(avoided[cc]) + 1.96 * se_av), big.mark = ","), "\n")
 cat("as a share of the observed damage cost:", round(100 * sum(avoided[cc]) / sum(k$cost), 1), "%\n")
 runB <- c(segments = nrow(d), damaged = sum(d$damaged), odds_ratio = exp(coef(p1)[["compliantCompliant"]]),
           lo = exp(coef(p1)[["compliantCompliant"]] - 1.96 * se[["compliantCompliant"]]), hi = exp(coef(p1)[["compliantCompliant"]] + 1.96 * se[["compliantCompliant"]]),
@@ -217,12 +200,11 @@ runB <- c(segments = nrow(d), damaged = sum(d$damaged), odds_ratio = exp(coef(p1
 
 
 # -----------------------------------------------------------------------------
-# STEP 4.  Side by side
+# step 4  side by side
 # -----------------------------------------------------------------------------
-# Runs A and B share towns, segments and terms; only the record source differs. Compare the
-# compliance odds ratio (scale-free) and the avoided cost as a share of each run's own damage
-# cost; the raw dollars are not comparable because VTrans dollars are a subset of the pooled ones.
-cat("\n=== STEP 4: side by side,", STORM, "storm ===\n\n")
+# runs A and B share towns, segments and terms; compare the odds ratio and the avoided cost as a share of each
+# run's own damage cost; the raw dollars are not comparable because VTrans dollars are a subset of the pooled ones
+cat("\nstep 4 side by side,", STORM, "storm\n\n")
 side <- rbind(state, runA, runB)
 rownames(side) <- c("statewide, pooled", "both-source towns, pooled (A)", "both-source towns, VTrans only (B)")
 print(data.frame(segments   = side[, "segments"], damaged = side[, "damaged"],
@@ -231,33 +213,24 @@ print(data.frame(segments   = side[, "segments"], damaged = side[, "damaged"],
                  avoided    = format(round(side[, "avoided"]), big.mark = ","),
                  avoided_95 = paste0(format(round(side[, "avoided_lo"]), big.mark = ","), " to ", format(round(side[, "avoided_hi"]), big.mark = ",")),
                  pct_of_cost = round(side[, "pct_of_cost"], 1)))
-
-
-# =============================================================================
-# END
-#
-# To report: the compliance odds ratio and the avoided cost (with its clustered interval and as a
-# share of observed cost) for the statewide run, and for runs A and B on the both-source towns.
-# Where A and B disagree, the difference is what the two record systems captured, not the roads.
-# =============================================================================
 ```
 
 ## Output 2023
 
 ```
---- Segments ---
+segments
 [1] 59695
---- Towns ---
+towns
 [1] 204
---- Compliance status ---
+compliance status
 
 Does Not Meet     Compliant 
          9520         50175 
-=== STEP 1: statewide ===
+step 1 statewide
 
 damaged segments: 1457   total cost: 58,222,056 
 
-Part 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
+part 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
                                     B SE_clustered Exp_B lo_95  hi_95
 (Intercept)                    -8.159        0.602 0.000 0.000  0.001
 compliantCompliant             -0.231        0.086 0.794 0.670  0.940
@@ -287,7 +260,7 @@ road_miles_municipal            0.002        0.005 1.002 0.992  1.011
 grand_list_equalized_muni_100M -0.033        0.027 0.967 0.917  1.021
 AUC: 0.8223 
 
-Part 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
+part 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
                                     B SE_clustered   Exp_B   lo_95    hi_95
 (Intercept)                     6.050        0.695 424.307 108.711 1656.099
 parent_till                    -0.453        0.183   0.636   0.444    0.910
@@ -313,7 +286,7 @@ road_miles_municipal            0.007        0.004   1.007   0.998    1.015
 grand_list_equalized_muni_100M -0.004        0.018   0.996   0.962    1.031
 deviance R2: 0.2515 
 
-Avoided cost statewide: 11,368,894  clustered 95%: 899,243 to 21,838,545 
+avoided cost statewide: 11,368,894  clustered 95%: 899,243 to 21,838,545 
 as a share of the observed damage cost: 19.5 %
 ten sample towns (NA = not in this storm's exposed population):
  Brattleboro      Corinth  Wallingford     Hardwick West Windsor      Wolcott 
@@ -321,13 +294,13 @@ ten sample towns (NA = not in this storm's exposed population):
   Washington     Richmond     Stamford   Starksboro 
       173891        14667         8320        37902 
 
-=== STEP 2: both-source towns, pooled records ===
+step 2 both-source towns, pooled records
 
 towns: 24   segments: 8641 
 damaged segments: 667   total cost: 29,577,443 
 indicators estimable here: parent_A, parent_DT, parent_GL, hydro_B 
 
-Part 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
+part 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
                                     B SE_clustered Exp_B lo_95  hi_95
 (Intercept)                    -6.430        0.663 0.002 0.000  0.006
 compliantCompliant             -0.133        0.115 0.876 0.699  1.097
@@ -355,7 +328,7 @@ road_miles_municipal            0.002        0.005 1.002 0.992  1.012
 grand_list_equalized_muni_100M -0.081        0.057 0.922 0.824  1.032
 AUC: 0.7436 
 
-Part 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
+part 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
                                     B SE_clustered     Exp_B    lo_95     hi_95
 (Intercept)                     9.414        0.737 12255.535 2891.854 51938.354
 parent_till                    -0.468        0.364     0.626    0.307     1.278
@@ -378,17 +351,17 @@ vtrans_district7               -0.272        0.126     0.762    0.596     0.975
 vtrans_district8                1.157        0.521     3.181    1.145     8.839
 road_miles_municipal            0.005        0.006     1.005    0.993     1.016
 grand_list_equalized_muni_100M -0.112        0.069     0.894    0.781     1.024
-Part 2 deviance R2: 0.2682 
+deviance R2: 0.2682 
 
-Avoided cost, these towns: 2,669,712  clustered 95%: -2,160,509 to 7,499,932 
+avoided cost, these towns: 2,669,712  clustered 95%: -2,160,509 to 7,499,932 
 as a share of the observed damage cost: 9 %
 
-=== STEP 3: both-source towns, VTrans records only ===
+step 3 both-source towns, VTrans records only
 
 damaged segments: 261   total cost: 9,223,297 
 indicators estimable here: parent_A, parent_DT, parent_GL, hydro_B 
 
-Part 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
+part 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
                                     B SE_clustered Exp_B lo_95  hi_95
 (Intercept)                    -7.413        0.936 0.001 0.000  0.004
 compliantCompliant              0.083        0.164 1.087 0.788  1.499
@@ -416,7 +389,7 @@ road_miles_municipal            0.001        0.006 1.001 0.989  1.013
 grand_list_equalized_muni_100M -0.146        0.066 0.865 0.759  0.985
 AUC: 0.7807 
 
-Part 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
+part 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
                                     B SE_clustered     Exp_B    lo_95
 (Intercept)                    10.737        1.390 46038.820 3018.333
 parent_till                    -0.532        0.315     0.587    0.317
@@ -461,12 +434,12 @@ vtrans_district7                    2.671
 vtrans_district8                    1.880
 road_miles_municipal                1.018
 grand_list_equalized_muni_100M      0.998
-Part 2 deviance R2: 0.3078 
+deviance R2: 0.3078 
 
-Avoided cost, these towns: -522,629  clustered 95%: -2,456,174 to 1,410,916 
+avoided cost, these towns: -522,629  clustered 95%: -2,456,174 to 1,410,916 
 as a share of the observed damage cost: -5.7 %
 
-=== STEP 4: side by side, 2023 storm ===
+step 4 side by side, 2023 storm
 
                                    segments damaged odds_ratio   clustered_95
 statewide, pooled                     59695    1457      0.794   0.67 to 0.94
@@ -485,19 +458,19 @@ both-source towns, VTrans only (B)        -5.7
 ## Output 2024
 
 ```
---- Segments ---
+segments
 [1] 22571
---- Towns ---
+towns
 [1] 94
---- Compliance status ---
+compliance status
 
 Does Not Meet     Compliant 
          4448         18123 
-=== STEP 1: statewide ===
+step 1 statewide
 
 damaged segments: 1018   total cost: 65,254,042 
 
-Part 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
+part 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
                                     B SE_clustered Exp_B lo_95  hi_95
 (Intercept)                    -9.086        1.208 0.000 0.000  0.001
 compliantCompliant             -0.263        0.118 0.769 0.610  0.970
@@ -522,7 +495,7 @@ road_miles_municipal           -0.006        0.006 0.994 0.982  1.007
 grand_list_equalized_muni_100M  0.009        0.006 1.009 0.996  1.021
 AUC: 0.7747 
 
-Part 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
+part 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
                                     B SE_clustered     Exp_B    lo_95
 (Intercept)                    10.871        0.912 52635.351 8804.891
 parent_till                     0.062        0.205     1.064    0.712
@@ -561,7 +534,7 @@ road_miles_municipal                0.998
 grand_list_equalized_muni_100M      1.028
 deviance R2: 0.2382 
 
-Avoided cost statewide: 13,603,182  clustered 95%: -1,240,559 to 28,446,922 
+avoided cost statewide: 13,603,182  clustered 95%: -1,240,559 to 28,446,922 
 as a share of the observed damage cost: 20.8 %
 ten sample towns (NA = not in this storm's exposed population):
       <NA>       <NA>       <NA>   Hardwick       <NA>    Wolcott       <NA> 
@@ -569,13 +542,13 @@ ten sample towns (NA = not in this storm's exposed population):
   Richmond       <NA> Starksboro 
     222257         NA     170113 
 
-=== STEP 2: both-source towns, pooled records ===
+step 2 both-source towns, pooled records
 
 towns: 26   segments: 9473 
 damaged segments: 747   total cost: 42,092,428 
 indicators estimable here: parent_A, parent_DT, parent_GL, parent_GT_DT, hydro_B 
 
-Part 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
+part 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
                                     B SE_clustered Exp_B lo_95  hi_95
 (Intercept)                    -6.111        1.185 0.002 0.000  0.023
 compliantCompliant             -0.355        0.125 0.701 0.549  0.895
@@ -599,7 +572,7 @@ road_miles_municipal           -0.015        0.008 0.985 0.969  1.000
 grand_list_equalized_muni_100M  0.012        0.009 1.012 0.995  1.030
 AUC: 0.7411 
 
-Part 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
+part 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
                                     B SE_clustered     Exp_B    lo_95
 (Intercept)                    11.055        1.135 63248.542 6832.032
 parent_till                     0.079        0.247     1.083    0.668
@@ -634,17 +607,17 @@ vtrans_district5                    0.800
 vtrans_district7                    7.923
 road_miles_municipal                0.996
 grand_list_equalized_muni_100M      1.041
-Part 2 deviance R2: 0.1589 
+deviance R2: 0.1589 
 
-Avoided cost, these towns: 10,716,687  clustered 95%: 1,272,943 to 20,160,431 
+avoided cost, these towns: 10,716,687  clustered 95%: 1,272,943 to 20,160,431 
 as a share of the observed damage cost: 25.5 %
 
-=== STEP 3: both-source towns, VTrans records only ===
+step 3 both-source towns, VTrans records only
 
 damaged segments: 262   total cost: 15,319,997 
 indicators estimable here: parent_A, parent_DT, parent_GL, parent_GT_DT, hydro_B 
 
-Part 1: every term -- B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
+part 1, every term: B, clustered SE, Exp(B) = odds ratio, clustered 95% interval
                                     B SE_clustered Exp_B lo_95 hi_95
 (Intercept)                    -5.416        1.364 0.004 0.000 0.064
 compliantCompliant             -0.485        0.142 0.616 0.466 0.813
@@ -668,7 +641,7 @@ road_miles_municipal           -0.020        0.008 0.980 0.966 0.995
 grand_list_equalized_muni_100M  0.024        0.009 1.024 1.007 1.042
 AUC: 0.7944 
 
-Part 2: every term -- B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
+part 2, every term: B, clustered SE, Exp(B) = cost ratio, clustered 95% interval
                                     B SE_clustered    Exp_B   lo_95     hi_95
 (Intercept)                     8.277        1.283 3931.780 318.121 48594.401
 parent_till                     0.053        0.363    1.055   0.518     2.147
@@ -686,12 +659,12 @@ vtrans_district5               -0.804        0.271    0.448   0.263     0.761
 vtrans_district7                1.675        0.700    5.338   1.355    21.033
 road_miles_municipal           -0.009        0.009    0.991   0.973     1.009
 grand_list_equalized_muni_100M  0.000        0.011    1.000   0.980     1.022
-Part 2 deviance R2: 0.2922 
+deviance R2: 0.2922 
 
-Avoided cost, these towns: 5,941,244  clustered 95%: 1,363,655 to 10,518,832 
+avoided cost, these towns: 5,941,244  clustered 95%: 1,363,655 to 10,518,832 
 as a share of the observed damage cost: 38.8 %
 
-=== STEP 4: side by side, 2024 storm ===
+step 4 side by side, 2024 storm
 
                                    segments damaged odds_ratio   clustered_95
 statewide, pooled                     22571    1018      0.769   0.61 to 0.97

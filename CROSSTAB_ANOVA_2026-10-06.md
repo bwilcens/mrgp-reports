@@ -5,9 +5,6 @@ The approach mirrors Dr. Wemple's homework assignments on crosstab and ANOVA.
 ## Script: crosstab_anova.R
 
 ```r
-# =============================================================================
-# Crosstabs and one-way ANOVA on the categorical predictors: which categories can become 0/1 indicators?
-#
 # Data:  ../mrgp-roads-core/twopart_simple_2026-09-17/data/analysis_<STORM>_2026-09-27.csv
 #        one row per road segment; compliance-graded segments with at least 3.51 in of rain,
 #        Averill excluded; damaged = 1 if the de-duplicated repair cost (cost_dedup) is above zero
@@ -15,17 +12,10 @@ The approach mirrors Dr. Wemple's homework assignments on crosstab and ANOVA.
 #                         GF glacio-fluvial, GL glacio-lacustrine; the rest are mixed or rare codes)
 #        HYDROGROUP       hydrologic soil group (A well drained ... D poorly drained; A/D etc. dual)
 #        vtrans_district  VTrans maintenance district, 1 to 9
-#
-# The task: cross-tabulate each categorical against damage, then decide which categories carry
-# their own signal and can be entered in the model as a 0/1 indicator, leaving the rest off.
-#
-# Run one line at a time with Ctrl+Enter and read the Console after each line. Set STORM to 2023
-# or 2024. Nothing is written to disk.
-# =============================================================================
 
 
 # -----------------------------------------------------------------------------
-# STEP 0.  Point R at the data and read it in
+# step 0  read the data
 # -----------------------------------------------------------------------------
 STORM <- 2023
 
@@ -34,64 +24,53 @@ roads <- read.csv(paste0("../mrgp-roads-core/twopart_simple_2026-09-17/data/anal
 roads <- roads[roads$Precip >= 3.51 & roads$Town != "Averill", ]
 roads$damaged <- as.integer(roads$cost_dedup > 0)
 
-# the three categoricals as factors (district arrives as a number in the file; a number would be fitted as
-# a straight line, not as categories)
+# the three categoricals as factors (district arrives as a number in the file)
 roads$PARENT          <- factor(roads$PARENT)
 roads$HYDROGROUP      <- factor(roads$HYDROGROUP)
 roads$vtrans_district <- factor(roads$vtrans_district)
 
-cat("--- Number of segments ---\n");        print(nrow(roads))
-cat("--- Number damaged ---\n");            print(sum(roads$damaged))
-cat("--- Overall percent damaged ---\n");   print(round(100 * mean(roads$damaged), 2))
+cat("segments\n");                 print(nrow(roads))
+cat("damaged\n");                  print(sum(roads$damaged))
+cat("overall percent damaged\n");  print(round(100 * mean(roads$damaged), 2))
 
 
 # -----------------------------------------------------------------------------
-# STEP 1.  The decision rule, stated before looking at any table
+# step 1  the decision rule
 # -----------------------------------------------------------------------------
-# A category becomes a 0/1 indicator when all three hold:
-#   (a) its adjusted residual in the damaged column is at least 2 in size -- the category has
-#       clearly more (positive) or fewer (negative) damaged segments than independence predicts;
-#   (b) its expected count in the damaged column is at least 5 -- the usual minimum for the
-#       chi-square approximation, and SPSS's footnote threshold;
-#   (c) it has at least one damaged segment -- a category with none cannot have a coefficient.
-# Every category that fails is left off and becomes part of the baseline.
-#
-# The adjusted residual is (observed - expected) divided by the standard deviation that difference
-# would have if category and damage were unrelated, so it reads like a z-score; its two-sided p-value
-# is 2 * P(Z > |residual|), and a residual of 2 is p = .046, which is why 2 is the threshold. R returns it as
-# chisq.test(...)$stdres; SPSS prints it when "Adjusted standardized" is ticked under Cells.
+# a category becomes a 0/1 indicator when all three hold:
+#   (a) its adjusted residual in the damaged column is at least 2 in size
+#   (b) its expected count in the damaged column is at least 5
+#   (c) it has at least one damaged segment
+# everything else is left off and becomes the baseline
+# the adjusted residual is (observed - expected) / its standard deviation under independence, a z-score;
+# its two-sided p is 2 * P(Z > |residual|), and a residual of 2 is p = .046
 
 
 # -----------------------------------------------------------------------------
-# STEP 2.  Parent material
+# step 2  parent material
 # -----------------------------------------------------------------------------
-# This replaces  Analyze > Descriptive Statistics > Crosstabs  with PARENT as the row variable
-# and damaged as the column variable, with Expected and Adjusted standardized ticked under Cells
-# and Chi-square ticked under Statistics.
-cat("=== STEP 2: parent material by damage ===\n\n")
+cat("step 2 parent material by damage\n\n")
 
 tab <- table(Parent = roads$PARENT, Damaged = roads$damaged)
 
-cat("--- Observed counts with totals ---\n")
+cat("observed counts with totals\n")
 print(addmargins(tab))
 
-cat("\n--- Row percentages (within each parent material) ---\n")
+cat("\nrow percentages\n")
 print(round(100 * prop.table(tab, margin = 1), 2))
 
 chi <- chisq.test(tab)
 
-cat("\n--- Expected counts (if parent material and damage were unrelated) ---\n")
+cat("\nexpected counts\n")
 print(round(chi$expected, 1))
 
-cat("\n--- Pearson chi-square test ---\n")
+cat("\npearson chi-square test\n")
 print(chi)
 
-cat("\n--- Adjusted residuals ---\n")
+cat("\nadjusted residuals\n")
 print(round(chi$stdres, 2))
 
-# The decision, category by category. Read the damaged column ("1") of the residuals and the
-# expected counts against the rule in STEP 1.
-cat("\n--- The rule applied ---\n")
+cat("\nthe rule applied\n")
 decision <- data.frame(category  = rownames(tab),
                        segments  = as.integer(rowSums(tab)),
                        damaged   = as.integer(tab[, "1"]),
@@ -102,35 +81,35 @@ decision$indicator <- abs(decision$adj_resid) >= 2 & decision$expected >= 5 & de
 print(decision, row.names = FALSE)
 
 parent_in <- decision$category[decision$indicator]
-cat("\nParent material categories that become indicators:", paste(parent_in, collapse = ", "), "\n")
-cat("Left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
+cat("\nparent material categories that become indicators:", paste(parent_in, collapse = ", "), "\n")
+cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 
 
 # -----------------------------------------------------------------------------
-# STEP 3.  Hydrologic group
+# step 3  hydrologic group
 # -----------------------------------------------------------------------------
-cat("=== STEP 3: hydrologic group by damage ===\n\n")
+cat("step 3 hydrologic group by damage\n\n")
 
 tab <- table(Hydrogroup = roads$HYDROGROUP, Damaged = roads$damaged)
 
-cat("--- Observed counts with totals ---\n")
+cat("observed counts with totals\n")
 print(addmargins(tab))
 
-cat("\n--- Row percentages (within each hydrologic group) ---\n")
+cat("\nrow percentages\n")
 print(round(100 * prop.table(tab, margin = 1), 2))
 
 chi <- chisq.test(tab)
 
-cat("\n--- Expected counts ---\n")
+cat("\nexpected counts\n")
 print(round(chi$expected, 1))
 
-cat("\n--- Pearson chi-square test ---\n")
+cat("\npearson chi-square test\n")
 print(chi)
 
-cat("\n--- Adjusted residuals ---\n")
+cat("\nadjusted residuals\n")
 print(round(chi$stdres, 2))
 
-cat("\n--- The rule applied ---\n")
+cat("\nthe rule applied\n")
 decision <- data.frame(category  = rownames(tab),
                        segments  = as.integer(rowSums(tab)),
                        damaged   = as.integer(tab[, "1"]),
@@ -141,35 +120,35 @@ decision$indicator <- abs(decision$adj_resid) >= 2 & decision$expected >= 5 & de
 print(decision, row.names = FALSE)
 
 hydro_in <- decision$category[decision$indicator]
-cat("\nHydrologic groups that become indicators:", paste(hydro_in, collapse = ", "), "\n")
-cat("Left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
+cat("\nhydrologic groups that become indicators:", paste(hydro_in, collapse = ", "), "\n")
+cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 
 
 # -----------------------------------------------------------------------------
-# STEP 4.  VTrans district
+# step 4  vtrans district
 # -----------------------------------------------------------------------------
-cat("=== STEP 4: VTrans district by damage ===\n\n")
+cat("step 4 vtrans district by damage\n\n")
 
 tab <- table(District = roads$vtrans_district, Damaged = roads$damaged)
 
-cat("--- Observed counts with totals ---\n")
+cat("observed counts with totals\n")
 print(addmargins(tab))
 
-cat("\n--- Row percentages (within each district) ---\n")
+cat("\nrow percentages\n")
 print(round(100 * prop.table(tab, margin = 1), 2))
 
 chi <- chisq.test(tab)
 
-cat("\n--- Expected counts ---\n")
+cat("\nexpected counts\n")
 print(round(chi$expected, 1))
 
-cat("\n--- Pearson chi-square test ---\n")
+cat("\npearson chi-square test\n")
 print(chi)
 
-cat("\n--- Adjusted residuals ---\n")
+cat("\nadjusted residuals\n")
 print(round(chi$stdres, 2))
 
-cat("\n--- The rule applied ---\n")
+cat("\nthe rule applied\n")
 decision <- data.frame(category  = rownames(tab),
                        segments  = as.integer(rowSums(tab)),
                        damaged   = as.integer(tab[, "1"]),
@@ -180,43 +159,33 @@ decision$indicator <- abs(decision$adj_resid) >= 2 & decision$expected >= 5 & de
 print(decision, row.names = FALSE)
 
 district_in <- decision$category[decision$indicator]
-cat("\nDistricts that become indicators:", paste(district_in, collapse = ", "), "\n")
-cat("Left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
-# If every district passes, nothing is left off and the indicators would just rebuild the full
-# factor. The district is the storm's footprint, so that is the expected result in 2023.
+cat("\ndistricts that become indicators:", paste(district_in, collapse = ", "), "\n")
+cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
+# if every district passes, nothing is left off and the indicators rebuild the full factor
 
 
 # -----------------------------------------------------------------------------
+# step 5  the cost side: one-way anova of ln(cost) by category
 # -----------------------------------------------------------------------------
-# STEP 5.  The cost side: one-way ANOVA of ln(cost) by category (Exercise 3)
-# -----------------------------------------------------------------------------
-# The crosstab asks whether a category changes the chance of damage. The ANOVA asks, among the
-# segments that were damaged, whether a category changes the repair cost. Cost is taken on the
-# natural-log scale because a few very large repairs would otherwise dominate the means.
-#
-# The decision rule for the cost side: a category becomes a 0/1 indicator when it appears in at
-# least one Bonferroni pairwise comparison with p below .05 -- that is, its mean cost differs from
-# at least one other category's after correcting for the number of pairs. The rest are left off.
+# damaged segments only; cost on the natural-log scale so a few very large repairs do not dominate
+# the cost-side rule: a category becomes a 0/1 indicator when it is in at least one bonferroni pair with p < .05
 dmg <- roads[roads$damaged == 1, ]
 dmg$log_cost <- log(dmg$cost_dedup)
-cat("=== STEP 5: damaged segments for the ANOVA ===\n")
-cat("--- Number of damaged segments ---\n");  print(nrow(dmg))
-cat("--- Mean ln(cost), all damaged ---\n");  print(round(mean(dmg$log_cost), 3))
+cat("step 5 damaged segments for the anova\n")
+cat("damaged segments\n");          print(nrow(dmg))
+cat("mean ln(cost), all damaged\n"); print(round(mean(dmg$log_cost), 3))
 
 
 # -----------------------------------------------------------------------------
-# STEP 6.  Parent material: ANOVA
+# step 6  parent material anova
 # -----------------------------------------------------------------------------
-# This replaces  Analyze > Compare Means > One-Way ANOVA  with log_cost as the dependent variable,
-# PARENT as the factor, Bonferroni under Post Hoc, and Homogeneity of variance test under Options.
-cat("\n=== STEP 6: ln(cost) by parent material ===\n\n")
+cat("\nstep 6 ln(cost) by parent material\n\n")
 dmg$PARENT <- factor(dmg$PARENT)
 
-cat("--- Damaged segments per group ---\n");   print(table(dmg$PARENT))
-cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$PARENT, mean), 3))
+cat("damaged segments per group\n");   print(table(dmg$PARENT))
+cat("\nmean ln(cost) per group\n");    print(round(tapply(dmg$log_cost, dmg$PARENT, mean), 3))
 
-# Error bar plot: mean +/- 2 standard errors per group (Exercise 3, Question 1). Where the bars
-# fail to overlap, the means very likely differ; where they overlap heavily, they probably do not.
+# error bar plot: mean +/- 2 standard errors per group
 mean_g <- tapply(dmg$log_cost, dmg$PARENT, mean)
 se_g   <- tapply(dmg$log_cost, dmg$PARENT, sd) / sqrt(table(dmg$PARENT))
 plot(1:nlevels(dmg$PARENT), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g, mean_g + 2 * se_g), na.rm = TRUE),
@@ -225,20 +194,19 @@ plot(1:nlevels(dmg$PARENT), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g, me
 axis(1, at = 1:nlevels(dmg$PARENT), labels = paste0(levels(dmg$PARENT), "\nn=", table(dmg$PARENT)), cex.axis = 0.8, padj = 0.5)
 arrows(1:nlevels(dmg$PARENT), mean_g - 2 * se_g, 1:nlevels(dmg$PARENT), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
 
-cat("\n--- ANOVA table ---\n")
+cat("\nanova table\n")
 print(summary(aov(log_cost ~ PARENT, data = dmg)))
 
-cat("\n--- Levene test (large p = equal variances) ---\n")
+cat("\nlevene test (large p = equal variances)\n")
 spread <- abs(dmg$log_cost - ave(dmg$log_cost, dmg$PARENT))
 print(anova(lm(spread ~ dmg$PARENT)))
 
-cat("\n--- Bonferroni pairwise comparisons ---\n")
+cat("\nbonferroni pairwise comparisons\n")
 pw <- pairwise.t.test(dmg$log_cost, dmg$PARENT, p.adjust.method = "bonferroni")
 print(pw)
 
-# The decision: a category is in a significant pair if any p in its row or its column of the grid
-# is below .05 (rows hold the later categories, columns the earlier ones).
-cat("--- The rule applied ---\n")
+# a category is in a significant pair if any p in its row or its column of the grid is below .05
+cat("the rule applied\n")
 row_hit <- rowSums(pw$p.value < 0.05, na.rm = TRUE) > 0
 col_hit <- colSums(pw$p.value < 0.05, na.rm = TRUE) > 0
 decision <- data.frame(category     = levels(dmg$PARENT),
@@ -246,19 +214,19 @@ decision <- data.frame(category     = levels(dmg$PARENT),
                        mean_ln_cost = round(as.numeric(tapply(dmg$log_cost, dmg$PARENT, mean)), 3))
 decision$indicator <- decision$category %in% c(names(row_hit)[row_hit], names(col_hit)[col_hit])
 print(decision, row.names = FALSE)
-cat("\nParent material categories that become cost indicators:",
+cat("\nparent material categories that become cost indicators:",
     paste(decision$category[decision$indicator], collapse = ", "), "\n")
-cat("Left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
+cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 
 
 # -----------------------------------------------------------------------------
-# STEP 7.  Hydrologic group: ANOVA
+# step 7  hydrologic group anova
 # -----------------------------------------------------------------------------
-cat("=== STEP 7: ln(cost) by hydrologic group ===\n\n")
+cat("step 7 ln(cost) by hydrologic group\n\n")
 dmg$HYDROGROUP <- factor(dmg$HYDROGROUP)
 
-cat("--- Damaged segments per group ---\n");   print(table(dmg$HYDROGROUP))
-cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$HYDROGROUP, mean), 3))
+cat("damaged segments per group\n");   print(table(dmg$HYDROGROUP))
+cat("\nmean ln(cost) per group\n");    print(round(tapply(dmg$log_cost, dmg$HYDROGROUP, mean), 3))
 
 mean_g <- tapply(dmg$log_cost, dmg$HYDROGROUP, mean)
 se_g   <- tapply(dmg$log_cost, dmg$HYDROGROUP, sd) / sqrt(table(dmg$HYDROGROUP))
@@ -268,18 +236,18 @@ plot(1:nlevels(dmg$HYDROGROUP), mean_g, ylim = range(c(mean_g, mean_g - 2 * se_g
 axis(1, at = 1:nlevels(dmg$HYDROGROUP), labels = paste0(levels(dmg$HYDROGROUP), "\nn=", table(dmg$HYDROGROUP)), cex.axis = 0.8, padj = 0.5)
 arrows(1:nlevels(dmg$HYDROGROUP), mean_g - 2 * se_g, 1:nlevels(dmg$HYDROGROUP), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
 
-cat("\n--- ANOVA table ---\n")
+cat("\nanova table\n")
 print(summary(aov(log_cost ~ HYDROGROUP, data = dmg)))
 
-cat("\n--- Levene test (large p = equal variances) ---\n")
+cat("\nlevene test (large p = equal variances)\n")
 spread <- abs(dmg$log_cost - ave(dmg$log_cost, dmg$HYDROGROUP))
 print(anova(lm(spread ~ dmg$HYDROGROUP)))
 
-cat("\n--- Bonferroni pairwise comparisons ---\n")
+cat("\nbonferroni pairwise comparisons\n")
 pw <- pairwise.t.test(dmg$log_cost, dmg$HYDROGROUP, p.adjust.method = "bonferroni")
 print(pw)
 
-cat("--- The rule applied ---\n")
+cat("the rule applied\n")
 row_hit <- rowSums(pw$p.value < 0.05, na.rm = TRUE) > 0
 col_hit <- colSums(pw$p.value < 0.05, na.rm = TRUE) > 0
 decision <- data.frame(category     = levels(dmg$HYDROGROUP),
@@ -287,19 +255,19 @@ decision <- data.frame(category     = levels(dmg$HYDROGROUP),
                        mean_ln_cost = round(as.numeric(tapply(dmg$log_cost, dmg$HYDROGROUP, mean)), 3))
 decision$indicator <- decision$category %in% c(names(row_hit)[row_hit], names(col_hit)[col_hit])
 print(decision, row.names = FALSE)
-cat("\nHydrologic groups that become cost indicators:",
+cat("\nhydrologic groups that become cost indicators:",
     paste(decision$category[decision$indicator], collapse = ", "), "\n")
-cat("Left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
+cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 
 
 # -----------------------------------------------------------------------------
-# STEP 8.  VTrans district: ANOVA
+# step 8  vtrans district anova
 # -----------------------------------------------------------------------------
-cat("=== STEP 8: ln(cost) by VTrans district ===\n\n")
+cat("step 8 ln(cost) by vtrans district\n\n")
 dmg$vtrans_district <- factor(dmg$vtrans_district)
 
-cat("--- Damaged segments per group ---\n");   print(table(dmg$vtrans_district))
-cat("\n--- Mean ln(cost) per group ---\n");    print(round(tapply(dmg$log_cost, dmg$vtrans_district, mean), 3))
+cat("damaged segments per group\n");   print(table(dmg$vtrans_district))
+cat("\nmean ln(cost) per group\n");    print(round(tapply(dmg$log_cost, dmg$vtrans_district, mean), 3))
 
 mean_g <- tapply(dmg$log_cost, dmg$vtrans_district, mean)
 se_g   <- tapply(dmg$log_cost, dmg$vtrans_district, sd) / sqrt(table(dmg$vtrans_district))
@@ -309,18 +277,18 @@ plot(1:nlevels(dmg$vtrans_district), mean_g, ylim = range(c(mean_g, mean_g - 2 *
 axis(1, at = 1:nlevels(dmg$vtrans_district), labels = paste0(levels(dmg$vtrans_district), "\nn=", table(dmg$vtrans_district)), cex.axis = 0.8, padj = 0.5)
 arrows(1:nlevels(dmg$vtrans_district), mean_g - 2 * se_g, 1:nlevels(dmg$vtrans_district), mean_g + 2 * se_g, angle = 90, code = 3, length = 0.05)
 
-cat("\n--- ANOVA table ---\n")
+cat("\nanova table\n")
 print(summary(aov(log_cost ~ vtrans_district, data = dmg)))
 
-cat("\n--- Levene test (large p = equal variances) ---\n")
+cat("\nlevene test (large p = equal variances)\n")
 spread <- abs(dmg$log_cost - ave(dmg$log_cost, dmg$vtrans_district))
 print(anova(lm(spread ~ dmg$vtrans_district)))
 
-cat("\n--- Bonferroni pairwise comparisons ---\n")
+cat("\nbonferroni pairwise comparisons\n")
 pw <- pairwise.t.test(dmg$log_cost, dmg$vtrans_district, p.adjust.method = "bonferroni")
 print(pw)
 
-cat("--- The rule applied ---\n")
+cat("the rule applied\n")
 row_hit <- rowSums(pw$p.value < 0.05, na.rm = TRUE) > 0
 col_hit <- colSums(pw$p.value < 0.05, na.rm = TRUE) > 0
 decision <- data.frame(category     = levels(dmg$vtrans_district),
@@ -328,34 +296,23 @@ decision <- data.frame(category     = levels(dmg$vtrans_district),
                        mean_ln_cost = round(as.numeric(tapply(dmg$log_cost, dmg$vtrans_district, mean)), 3))
 decision$indicator <- decision$category %in% c(names(row_hit)[row_hit], names(col_hit)[col_hit])
 print(decision, row.names = FALSE)
-cat("\nDistricts that become cost indicators:",
+cat("\ndistricts that become cost indicators:",
     paste(decision$category[decision$indicator], collapse = ", "), "\n")
-cat("Left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
-
-
-# =============================================================================
-# END
-#
-# To report:
-#   Occurrence side -- for each categorical, the chi-square (value, df, p), the categories chosen as
-#   indicators with their adjusted residuals, and the categories left off and why.
-#   Cost side -- for each categorical, F (df, p), the Levene test, the Bonferroni pairs below .05,
-#   and the categories chosen as cost indicators.
-# =============================================================================
+cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 ```
 
 ## Output 2023
 
 ```
---- Number of segments ---
+segments
 [1] 59695
---- Number damaged ---
+damaged
 [1] 1457
---- Overall percent damaged ---
+overall percent damaged
 [1] 2.44
-=== STEP 2: parent material by damage ===
+step 2 parent material by damage
 
---- Observed counts with totals ---
+observed counts with totals
        Damaged
 Parent      0     1   Sum
   A      2389   115  2504
@@ -368,7 +325,7 @@ Parent      0     1   Sum
   M       163     1   164
   Sum   58238  1457 59695
 
---- Row percentages (within each parent material) ---
+row percentages
        Damaged
 Parent      0     1
   A     95.41  4.59
@@ -380,7 +337,7 @@ Parent      0     1
   GT/DT 99.41  0.59
   M     99.39  0.61
 
---- Expected counts (if parent material and damage were unrelated) ---
+expected counts
        Damaged
 Parent        0     1
   A      2442.9  61.1
@@ -392,14 +349,14 @@ Parent        0     1
   GT/DT  1480.9  37.1
   M       160.0   4.0
 
---- Pearson chi-square test ---
+pearson chi-square test
 
 	Pearson's Chi-squared test
 
 data:  tab
 X-squared = 105.97, df = 7, p-value < 2.2e-16
 
---- Adjusted residuals ---
+adjusted residuals
        Damaged
 Parent      0     1
   A     -7.13  7.13
@@ -411,7 +368,7 @@ Parent      0     1
   GT/DT  4.73 -4.73
   M      1.52 -1.52
 
---- The rule applied ---
+the rule applied
  category segments damaged expected adj_resid      p indicator
         A     2504     115     61.1      7.13 0.0000      TRUE
        DT    24520     682    598.5      4.50 0.0000      TRUE
@@ -422,12 +379,12 @@ Parent      0     1
     GT/DT     1518       9     37.1     -4.73 0.0000      TRUE
         M      164       1      4.0     -1.52 0.1281     FALSE
 
-Parent material categories that become indicators: A, DT, GF, GL, GT, GT/DT 
-Left off (baseline): DT/GT, M 
+parent material categories that become indicators: A, DT, GF, GL, GT, GT/DT 
+left off (baseline): DT/GT, M 
 
-=== STEP 3: hydrologic group by damage ===
+step 3 hydrologic group by damage
 
---- Observed counts with totals ---
+observed counts with totals
            Damaged
 Hydrogroup      0     1   Sum
   A          9350   206  9556
@@ -440,7 +397,7 @@ Hydrogroup      0     1   Sum
   not rated   279    10   289
   Sum       58238  1457 59695
 
---- Row percentages (within each hydrologic group) ---
+row percentages
            Damaged
 Hydrogroup      0     1
   A         97.84  2.16
@@ -452,7 +409,7 @@ Hydrogroup      0     1
   D         97.46  2.54
   not rated 96.54  3.46
 
---- Expected counts ---
+expected counts
            Damaged
 Hydrogroup        0     1
   A          9322.8 233.2
@@ -464,14 +421,14 @@ Hydrogroup        0     1
   D         14188.0 355.0
   not rated   281.9   7.1
 
---- Pearson chi-square test ---
+pearson chi-square test
 
 	Pearson's Chi-squared test
 
 data:  tab
 X-squared = 41.045, df = 7, p-value = 7.936e-07
 
---- Adjusted residuals ---
+adjusted residuals
            Damaged
 Hydrogroup      0     1
   A          1.97 -1.97
@@ -483,7 +440,7 @@ Hydrogroup      0     1
   D         -0.93  0.93
   not rated -1.13  1.13
 
---- The rule applied ---
+the rule applied
   category segments damaged expected adj_resid      p indicator
          A     9556     206    233.2     -1.97 0.0488     FALSE
        A/D      753       8     18.4     -2.47 0.0136      TRUE
@@ -494,12 +451,12 @@ Hydrogroup      0     1
          D    14543     370    355.0      0.93 0.3526     FALSE
  not rated      289      10      7.1      1.13 0.2602     FALSE
 
-Hydrologic groups that become indicators: A/D, B, B/D, C/D 
-Left off (baseline): A, C, D, not rated 
+hydrologic groups that become indicators: A/D, B, B/D, C/D 
+left off (baseline): A, C, D, not rated 
 
-=== STEP 4: VTrans district by damage ===
+step 4 vtrans district by damage
 
---- Observed counts with totals ---
+observed counts with totals
         Damaged
 District     0     1   Sum
      1    6046    33  6079
@@ -513,7 +470,7 @@ District     0     1   Sum
      9    5230    14  5244
      Sum 58238  1457 59695
 
---- Row percentages (within each district) ---
+row percentages
         Damaged
 District     0     1
        1 99.46  0.54
@@ -526,7 +483,7 @@ District     0     1
        8 99.41  0.59
        9 99.73  0.27
 
---- Expected counts ---
+expected counts
         Damaged
 District       0     1
        1  5930.6 148.4
@@ -539,14 +496,14 @@ District       0     1
        8  4118.0 103.0
        9  5116.0 128.0
 
---- Pearson chi-square test ---
+pearson chi-square test
 
 	Pearson's Chi-squared test
 
 data:  tab
 X-squared = 1499.5, df = 8, p-value < 2.2e-16
 
---- Adjusted residuals ---
+adjusted residuals
         Damaged
 District      0      1
        1  10.12 -10.12
@@ -559,7 +516,7 @@ District      0      1
        8   8.07  -8.07
        9  10.68 -10.68
 
---- The rule applied ---
+the rule applied
  category segments damaged expected adj_resid     p indicator
         1     6079      33    148.4    -10.12 0e+00      TRUE
         2     6589     520    160.8     30.40 0e+00      TRUE
@@ -571,34 +528,34 @@ District      0      1
         8     4221      25    103.0     -8.07 0e+00      TRUE
         9     5244      14    128.0    -10.68 0e+00      TRUE
 
-Districts that become indicators: 1, 2, 3, 4, 5, 6, 7, 8, 9 
-Left off (baseline):  
+districts that become indicators: 1, 2, 3, 4, 5, 6, 7, 8, 9 
+left off (baseline):  
 
-=== STEP 5: damaged segments for the ANOVA ===
---- Number of damaged segments ---
+step 5 damaged segments for the anova
+damaged segments
 [1] 1457
---- Mean ln(cost), all damaged ---
+mean ln(cost), all damaged
 [1] 8.902
 
-=== STEP 6: ln(cost) by parent material ===
+step 6 ln(cost) by parent material
 
---- Damaged segments per group ---
+damaged segments per group
 
     A    DT DT/GT    GF    GL    GT GT/DT     M 
   115   682     8   213    43   386     9     1 
 
---- Mean ln(cost) per group ---
+mean ln(cost) per group
      A     DT  DT/GT     GF     GL     GT  GT/DT      M 
  9.251  8.738  8.905  9.305  9.803  8.736  9.821 11.521 
 
---- ANOVA table ---
+anova table
               Df Sum Sq Mean Sq F value   Pr(>F)    
 PARENT         7    127  18.160   5.287 5.56e-06 ***
 Residuals   1449   4977   3.435                     
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
---- Levene test (large p = equal variances) ---
+levene test (large p = equal variances)
 Analysis of Variance Table
 
 Response: spread
@@ -606,7 +563,7 @@ Response: spread
 dmg$PARENT    7    4.73 0.67555   0.529 0.8131
 Residuals  1449 1850.40 1.27702               
 
---- Bonferroni pairwise comparisons ---
+bonferroni pairwise comparisons
 
 	Pairwise comparisons using t tests with pooled SD 
 
@@ -622,7 +579,7 @@ GT/DT 1.0000 1.0000 1.0000 1.0000 1.0000 1.0000 -
 M     1.0000 1.0000 1.0000 1.0000 1.0000 1.0000 1.0000
 
 P value adjustment method: bonferroni 
---- The rule applied ---
+the rule applied
  category   n mean_ln_cost indicator
         A 115        9.251     FALSE
        DT 682        8.738      TRUE
@@ -633,28 +590,28 @@ P value adjustment method: bonferroni
     GT/DT   9        9.821     FALSE
         M   1       11.521     FALSE
 
-Parent material categories that become cost indicators: DT, GF, GL, GT 
-Left off (baseline): A, DT/GT, GT/DT, M 
+parent material categories that become cost indicators: DT, GF, GL, GT 
+left off (baseline): A, DT/GT, GT/DT, M 
 
-=== STEP 7: ln(cost) by hydrologic group ===
+step 7 ln(cost) by hydrologic group
 
---- Damaged segments per group ---
+damaged segments per group
 
         A       A/D         B       B/D         C       C/D         D not rated 
       206         8       254        75       341       193       370        10 
 
---- Mean ln(cost) per group ---
+mean ln(cost) per group
         A       A/D         B       B/D         C       C/D         D not rated 
     9.325     9.415     8.641     9.206     8.729     8.790     8.964     9.824 
 
---- ANOVA table ---
+anova table
               Df Sum Sq Mean Sq F value   Pr(>F)    
 HYDROGROUP     7     86  12.255   3.538 0.000892 ***
 Residuals   1449   5018   3.463                     
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
---- Levene test (large p = equal variances) ---
+levene test (large p = equal variances)
 Analysis of Variance Table
 
 Response: spread
@@ -662,7 +619,7 @@ Response: spread
 dmg$HYDROGROUP    7    7.49  1.0694  0.8333 0.5595
 Residuals      1449 1859.49  1.2833               
 
---- Bonferroni pairwise comparisons ---
+bonferroni pairwise comparisons
 
 	Pairwise comparisons using t tests with pooled SD 
 
@@ -678,7 +635,7 @@ D         0.7189 1.0000 0.9363 1.0000 1.0000 1.0000 -
 not rated 1.0000 1.0000 1.0000 1.0000 1.0000 1.0000 1.0000
 
 P value adjustment method: bonferroni 
---- The rule applied ---
+the rule applied
   category   n mean_ln_cost indicator
          A 206        9.325      TRUE
        A/D   8        9.415     FALSE
@@ -689,28 +646,28 @@ P value adjustment method: bonferroni
          D 370        8.964     FALSE
  not rated  10        9.824     FALSE
 
-Hydrologic groups that become cost indicators: A, B, C 
-Left off (baseline): A/D, B/D, C/D, D, not rated 
+hydrologic groups that become cost indicators: A, B, C 
+left off (baseline): A/D, B/D, C/D, D, not rated 
 
-=== STEP 8: ln(cost) by VTrans district ===
+step 8 ln(cost) by vtrans district
 
---- Damaged segments per group ---
+damaged segments per group
 
   1   2   3   4   5   6   7   8   9 
  33 520 147 137  35 505  41  25  14 
 
---- Mean ln(cost) per group ---
+mean ln(cost) per group
      1      2      3      4      5      6      7      8      9 
  9.184  7.921 10.700  8.798  9.167  9.315  9.540  8.909  9.313 
 
---- ANOVA table ---
+anova table
                   Df Sum Sq Mean Sq F value Pr(>F)    
 vtrans_district    8   1087  135.89   48.98 <2e-16 ***
 Residuals       1448   4017    2.77                   
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
---- Levene test (large p = equal variances) ---
+levene test (large p = equal variances)
 Analysis of Variance Table
 
 Response: spread
@@ -720,7 +677,7 @@ Residuals           1448 1487.01  1.0269
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
---- Bonferroni pairwise comparisons ---
+bonferroni pairwise comparisons
 
 	Pairwise comparisons using t tests with pooled SD 
 
@@ -737,7 +694,7 @@ data:  dmg$log_cost and dmg$vtrans_district
 9 1.00000 0.07492 0.10607 1.00000 1.00000 1.00000 1.00000 1.00000
 
 P value adjustment method: bonferroni 
---- The rule applied ---
+the rule applied
  category   n mean_ln_cost indicator
         1  33        9.184      TRUE
         2 520        7.921      TRUE
@@ -749,8 +706,8 @@ P value adjustment method: bonferroni
         8  25        8.909      TRUE
         9  14        9.313     FALSE
 
-Districts that become cost indicators: 1, 2, 3, 4, 5, 6, 7, 8 
-Left off (baseline): 9 
+districts that become cost indicators: 1, 2, 3, 4, 5, 6, 7, 8 
+left off (baseline): 9 
 
 ```
 
@@ -765,15 +722,15 @@ Left off (baseline): 9
 ## Output 2024
 
 ```
---- Number of segments ---
+segments
 [1] 22571
---- Number damaged ---
+damaged
 [1] 1018
---- Overall percent damaged ---
+overall percent damaged
 [1] 4.51
-=== STEP 2: parent material by damage ===
+step 2 parent material by damage
 
---- Observed counts with totals ---
+observed counts with totals
          Damaged
 Parent        0     1   Sum
   A         930    75  1005
@@ -788,7 +745,7 @@ Parent        0     1   Sum
   M          25     4    29
   Sum     21553  1018 22571
 
---- Row percentages (within each parent material) ---
+row percentages
          Damaged
 Parent        0     1
   A       92.54  7.46
@@ -802,7 +759,7 @@ Parent        0     1
   GT/GT_R 97.80  2.20
   M       86.21 13.79
 
---- Expected counts (if parent material and damage were unrelated) ---
+expected counts
          Damaged
 Parent         0     1
   A        959.7  45.3
@@ -816,14 +773,14 @@ Parent         0     1
   GT/GT_R   86.9   4.1
   M         27.7   1.3
 
---- Pearson chi-square test ---
+pearson chi-square test
 
 	Pearson's Chi-squared test
 
 data:  tab
 X-squared = 75.244, df = 9, p-value = 1.415e-12
 
---- Adjusted residuals ---
+adjusted residuals
          Damaged
 Parent        0     1
   A       -4.61  4.61
@@ -837,7 +794,7 @@ Parent        0     1
   GT/GT_R  1.07 -1.07
   M       -2.41  2.41
 
---- The rule applied ---
+the rule applied
  category segments damaged expected adj_resid      p indicator
         A     1005      75     45.3      4.61 0.0000      TRUE
        DT     8535     418    384.9      2.19 0.0288      TRUE
@@ -850,12 +807,12 @@ Parent        0     1
   GT/GT_R       91       2      4.1     -1.07 0.2868     FALSE
         M       29       4      1.3      2.41 0.0159     FALSE
 
-Parent material categories that become indicators: A, DT, DT/GT, GF, GL, GT/DT 
-Left off (baseline): GF/GL, GT, GT/GT_R, M 
+parent material categories that become indicators: A, DT, DT/GT, GF, GL, GT/DT 
+left off (baseline): GF/GL, GT, GT/GT_R, M 
 
-=== STEP 3: hydrologic group by damage ===
+step 3 hydrologic group by damage
 
---- Observed counts with totals ---
+observed counts with totals
            Damaged
 Hydrogroup      0     1   Sum
   A          2267   137  2404
@@ -868,7 +825,7 @@ Hydrogroup      0     1   Sum
   not rated   206     9   215
   Sum       21553  1018 22571
 
---- Row percentages (within each hydrologic group) ---
+row percentages
            Damaged
 Hydrogroup      0     1
   A         94.30  5.70
@@ -880,7 +837,7 @@ Hydrogroup      0     1
   D         96.25  3.75
   not rated 95.81  4.19
 
---- Expected counts ---
+expected counts
            Damaged
 Hydrogroup       0     1
   A         2295.6 108.4
@@ -892,14 +849,14 @@ Hydrogroup       0     1
   D         7788.1 367.9
   not rated  205.3   9.7
 
---- Pearson chi-square test ---
+pearson chi-square test
 
 	Pearson's Chi-squared test
 
 data:  tab
 X-squared = 42.548, df = 7, p-value = 4.078e-07
 
---- Adjusted residuals ---
+adjusted residuals
            Damaged
 Hydrogroup      0     1
   A         -2.97  2.97
@@ -911,7 +868,7 @@ Hydrogroup      0     1
   D          4.13 -4.13
   not rated  0.23 -0.23
 
---- The rule applied ---
+the rule applied
   category segments damaged expected adj_resid      p indicator
          A     2404     137    108.4      2.97 0.0030      TRUE
        A/D      362      16     16.3     -0.08 0.9335     FALSE
@@ -922,12 +879,12 @@ Hydrogroup      0     1
          D     8156     306    367.9     -4.13 0.0000      TRUE
  not rated      215       9      9.7     -0.23 0.8180     FALSE
 
-Hydrologic groups that become indicators: A, B, C, C/D, D 
-Left off (baseline): A/D, B/D, not rated 
+hydrologic groups that become indicators: A, B, C, C/D, D 
+left off (baseline): A/D, B/D, not rated 
 
-=== STEP 4: VTrans district by damage ===
+step 4 vtrans district by damage
 
---- Observed counts with totals ---
+observed counts with totals
         Damaged
 District     0     1   Sum
      3     137     0   137
@@ -938,7 +895,7 @@ District     0     1   Sum
      9    3017    39  3056
      Sum 21553  1018 22571
 
---- Row percentages (within each district) ---
+row percentages
         Damaged
 District      0      1
        3 100.00   0.00
@@ -948,7 +905,7 @@ District      0      1
        8 100.00   0.00
        9  98.72   1.28
 
---- Expected counts ---
+expected counts
         Damaged
 District      0     1
        3  130.8   6.2
@@ -958,14 +915,14 @@ District      0     1
        8  166.2   7.8
        9 2918.2 137.8
 
---- Pearson chi-square test ---
+pearson chi-square test
 
 	Pearson's Chi-squared test
 
 data:  tab
 X-squared = 354.59, df = 5, p-value < 2.2e-16
 
---- Adjusted residuals ---
+adjusted residuals
         Damaged
 District      0      1
        3   2.55  -2.55
@@ -975,7 +932,7 @@ District      0      1
        8   2.88  -2.88
        9   9.26  -9.26
 
---- The rule applied ---
+the rule applied
  category segments damaged expected adj_resid      p indicator
         3      137       0      6.2     -2.55 0.0107     FALSE
         5     5498     231    248.0     -1.27 0.2048     FALSE
@@ -984,32 +941,32 @@ District      0      1
         8      174       0      7.8     -2.88 0.0040     FALSE
         9     3056      39    137.8     -9.26 0.0000      TRUE
 
-Districts that become indicators: 6, 7, 9 
-Left off (baseline): 3, 5, 8 
+districts that become indicators: 6, 7, 9 
+left off (baseline): 3, 5, 8 
 
-=== STEP 5: damaged segments for the ANOVA ===
---- Number of damaged segments ---
+step 5 damaged segments for the anova
+damaged segments
 [1] 1018
---- Mean ln(cost), all damaged ---
+mean ln(cost), all damaged
 [1] 9.518
 
-=== STEP 6: ln(cost) by parent material ===
+step 6 ln(cost) by parent material
 
---- Damaged segments per group ---
+damaged segments per group
 
       A      DT   DT/GT      GF   GF/GL      GL      GT   GT/DT GT/GT_R       M 
      75     418      11     157       3     100     237      11       2       4 
 
---- Mean ln(cost) per group ---
+mean ln(cost) per group
       A      DT   DT/GT      GF   GF/GL      GL      GT   GT/DT GT/GT_R       M 
   9.917   9.480   9.099   9.614  10.443   9.123   9.558   9.747   9.245   9.599 
 
---- ANOVA table ---
+anova table
               Df Sum Sq Mean Sq F value Pr(>F)
 PARENT         9   35.2   3.911   1.491  0.146
 Residuals   1008 2644.1   2.623               
 
---- Levene test (large p = equal variances) ---
+levene test (large p = equal variances)
 Analysis of Variance Table
 
 Response: spread
@@ -1017,7 +974,7 @@ Response: spread
 dmg$PARENT    9    5.9 0.65535  0.6873  0.721
 Residuals  1008  961.2 0.95357               
 
---- Bonferroni pairwise comparisons ---
+bonferroni pairwise comparisons
 
 	Pairwise comparisons using t tests with pooled SD 
 
@@ -1035,7 +992,7 @@ GT/GT_R 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 -
 M       1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000  
 
 P value adjustment method: bonferroni 
---- The rule applied ---
+the rule applied
  category   n mean_ln_cost indicator
         A  75        9.917     FALSE
        DT 418        9.480     FALSE
@@ -1048,26 +1005,26 @@ P value adjustment method: bonferroni
   GT/GT_R   2        9.245     FALSE
         M   4        9.599     FALSE
 
-Parent material categories that become cost indicators:  
-Left off (baseline): A, DT, DT/GT, GF, GF/GL, GL, GT, GT/DT, GT/GT_R, M 
+parent material categories that become cost indicators:  
+left off (baseline): A, DT, DT/GT, GF, GF/GL, GL, GT, GT/DT, GT/GT_R, M 
 
-=== STEP 7: ln(cost) by hydrologic group ===
+step 7 ln(cost) by hydrologic group
 
---- Damaged segments per group ---
+damaged segments per group
 
         A       A/D         B       B/D         C       C/D         D not rated 
       137        16       166        48       146       190       306         9 
 
---- Mean ln(cost) per group ---
+mean ln(cost) per group
         A       A/D         B       B/D         C       C/D         D not rated 
     9.535     9.352     9.695    10.042     9.504     9.541     9.324     9.799 
 
---- ANOVA table ---
+anova table
               Df Sum Sq Mean Sq F value Pr(>F)
 HYDROGROUP     7   31.2   4.461   1.701  0.105
 Residuals   1010 2648.0   2.622               
 
---- Levene test (large p = equal variances) ---
+levene test (large p = equal variances)
 Analysis of Variance Table
 
 Response: spread
@@ -1075,7 +1032,7 @@ Response: spread
 dmg$HYDROGROUP    7   6.22 0.88787   0.921 0.4892
 Residuals      1010 973.72 0.96408               
 
---- Bonferroni pairwise comparisons ---
+bonferroni pairwise comparisons
 
 	Pairwise comparisons using t tests with pooled SD 
 
@@ -1091,7 +1048,7 @@ D         1.00 1.00 0.49 0.12 1.00 1.00 -
 not rated 1.00 1.00 1.00 1.00 1.00 1.00 1.00
 
 P value adjustment method: bonferroni 
---- The rule applied ---
+the rule applied
   category   n mean_ln_cost indicator
          A 137        9.535     FALSE
        A/D  16        9.352     FALSE
@@ -1102,28 +1059,28 @@ P value adjustment method: bonferroni
          D 306        9.324     FALSE
  not rated   9        9.799     FALSE
 
-Hydrologic groups that become cost indicators:  
-Left off (baseline): A, A/D, B, B/D, C, C/D, D, not rated 
+hydrologic groups that become cost indicators:  
+left off (baseline): A, A/D, B, B/D, C, C/D, D, not rated 
 
-=== STEP 8: ln(cost) by VTrans district ===
+step 8 ln(cost) by vtrans district
 
---- Damaged segments per group ---
+damaged segments per group
 
   5   6   7   9 
 231 539 209  39 
 
---- Mean ln(cost) per group ---
+mean ln(cost) per group
     5     6     7     9 
 8.916 9.633 9.903 9.420 
 
---- ANOVA table ---
+anova table
                   Df Sum Sq Mean Sq F value   Pr(>F)    
 vtrans_district    3  122.2   40.74   16.16 2.91e-10 ***
 Residuals       1014 2557.0    2.52                     
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
---- Levene test (large p = equal variances) ---
+levene test (large p = equal variances)
 Analysis of Variance Table
 
 Response: spread
@@ -1133,7 +1090,7 @@ Residuals           1014 926.44 0.91365
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
---- Bonferroni pairwise comparisons ---
+bonferroni pairwise comparisons
 
 	Pairwise comparisons using t tests with pooled SD 
 
@@ -1145,15 +1102,15 @@ data:  dmg$log_cost and dmg$vtrans_district
 9 0.40    1.00 0.49
 
 P value adjustment method: bonferroni 
---- The rule applied ---
+the rule applied
  category   n mean_ln_cost indicator
         5 231        8.916      TRUE
         6 539        9.633      TRUE
         7 209        9.903      TRUE
         9  39        9.420     FALSE
 
-Districts that become cost indicators: 5, 6, 7 
-Left off (baseline): 9 
+districts that become cost indicators: 5, 6, 7 
+left off (baseline): 9 
 
 ```
 
