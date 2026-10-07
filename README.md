@@ -7,6 +7,7 @@ Meeting reports for the two-part road-damage model: the script that produced eac
 - [Binary Selection from the Crosstab and ANOVA](BINARY_SELECTION_2026-10-06.md) — the categories chosen as 0/1 indicators by the crosstab (Part 1) and ANOVA (Part 2) rules, the refitted two-part model, and the comparison with the full-factor model, 2023 and 2024.
 - [Crosstab and ANOVA on Categoricals](CROSSTAB_ANOVA_2026-10-06.md) — step-by-step crosstabs and one-way ANOVAs on parent material, hydrologic group and VTrans district, with the indicator decision beside each category and the mean-and-whisker figures, 2023 and 2024.
 - [Two-Part Model, Classwork Style](CLASSWORK_TWOPART_2026-10-06.md) — the two-part model as a step-by-step exercise script: Part 1, clustered errors, Part 2, the avoided cost with its interval, and the both-source comparison, 2023 and 2024.
+- [Two-Part Model with Indicators, by Damage Record Source](TWOPART_SOURCES_2026-10-06.md) — the model with the chosen 0/1 indicators in place of the parent-material and hydrologic-group factors, statewide and on the both-source towns under pooled and VTrans-only records, side by side, 2023 and 2024. `R/add_indicators.R` adds the indicator columns to the data files.
 
 Data: compliance-graded road segments with at least 3.51 in of rain; damage and cost from the de-duplicated cost field, uncapped. Scripts live in the thesis repository under `twopart_simple_2026-09-17/R/` as `crosstab.R`, `anova_spss_tables.R`, `twopart_model.R`, `both_source_towns.R` and `category_errorbars.R`.
 
