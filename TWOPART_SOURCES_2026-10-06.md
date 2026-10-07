@@ -13,9 +13,7 @@ The approach mirrors Dr. Wemple's homework assignment on logistic regression.
 #        hydro_B (occurrence side); parent_till (cost side); every other category is the baseline
 
 
-# -----------------------------------------------------------------------------
 # step 0  read the data
-# -----------------------------------------------------------------------------
 STORM <- 2023
 
 library(glm2)        # steadier fitting for the gamma model
@@ -35,9 +33,7 @@ cat("towns\n");              print(length(unique(roads$Town)))
 cat("compliance status\n");  print(table(roads$compliant))
 
 
-# -----------------------------------------------------------------------------
 # step 1  statewide, pooled de-duplicated records
-# -----------------------------------------------------------------------------
 cat("step 1 statewide\n\n")
 d <- roads
 d$damaged <- as.integer(d$cost_dedup > 0)
@@ -95,9 +91,7 @@ state <- c(segments = nrow(d), damaged = sum(d$damaged), odds_ratio = exp(coef(p
            avoided = sum(avoided[cc]), avoided_lo = sum(avoided[cc]) - 1.96 * se_av, avoided_hi = sum(avoided[cc]) + 1.96 * se_av, pct_of_cost = 100 * sum(avoided[cc]) / sum(k$cost))
 
 
-# -----------------------------------------------------------------------------
 # step 2  both-source towns, run A: damage from the pooled de-duplicated records
-# -----------------------------------------------------------------------------
 # only the towns with at least one FEMA-recorded and one VTrans-recorded damage, so run B uses the same segments
 cat("\nstep 2 both-source towns, pooled records\n\n")
 both <- roads[roads$Town %in% intersect(unique(roads$Town[roads$fema_cost > 0]), unique(roads$Town[roads$vt_cost > 0])), ]
@@ -149,9 +143,7 @@ runA <- c(segments = nrow(d), damaged = sum(d$damaged), odds_ratio = exp(coef(p1
           avoided = sum(avoided[cc]), avoided_lo = sum(avoided[cc]) - 1.96 * se_av, avoided_hi = sum(avoided[cc]) + 1.96 * se_av, pct_of_cost = 100 * sum(avoided[cc]) / sum(k$cost))
 
 
-# -----------------------------------------------------------------------------
 # step 3  both-source towns, run B: damage from the VTrans records alone
-# -----------------------------------------------------------------------------
 # the same lines as step 2 with vt_cost in place of cost_dedup; a segment only FEMA recorded counts as undamaged
 cat("\nstep 3 both-source towns, VTrans records only\n\n")
 d <- both
@@ -199,9 +191,7 @@ runB <- c(segments = nrow(d), damaged = sum(d$damaged), odds_ratio = exp(coef(p1
           avoided = sum(avoided[cc]), avoided_lo = sum(avoided[cc]) - 1.96 * se_av, avoided_hi = sum(avoided[cc]) + 1.96 * se_av, pct_of_cost = 100 * sum(avoided[cc]) / sum(k$cost))
 
 
-# -----------------------------------------------------------------------------
 # step 4  side by side
-# -----------------------------------------------------------------------------
 # runs A and B share towns, segments and terms; compare the odds ratio and the avoided cost as a share of each
 # run's own damage cost; the raw dollars are not comparable because VTrans dollars are a subset of the pooled ones
 cat("\nstep 4 side by side,", STORM, "storm\n\n")

@@ -7,9 +7,7 @@
 #        vtrans_district  VTrans maintenance district, 1 to 9
 
 
-# -----------------------------------------------------------------------------
 # step 0  read the data
-# -----------------------------------------------------------------------------
 STORM <- 2023
 
 if (!dir.exists("data") && dir.exists("../data")) setwd("..")
@@ -27,9 +25,7 @@ cat("damaged\n");                  print(sum(roads$damaged))
 cat("overall percent damaged\n");  print(round(100 * mean(roads$damaged), 2))
 
 
-# -----------------------------------------------------------------------------
 # step 1  the decision rule
-# -----------------------------------------------------------------------------
 # a category becomes a 0/1 indicator when all three hold:
 #   (a) its adjusted residual in the damaged column is at least 2 in size
 #   (b) its expected count in the damaged column is at least 5
@@ -39,9 +35,7 @@ cat("overall percent damaged\n");  print(round(100 * mean(roads$damaged), 2))
 # its two-sided p is 2 * P(Z > |residual|), and a residual of 2 is p = .046
 
 
-# -----------------------------------------------------------------------------
 # step 2  parent material
-# -----------------------------------------------------------------------------
 cat("step 2 parent material by damage\n\n")
 
 tab <- table(Parent = roads$PARENT, Damaged = roads$damaged)
@@ -78,9 +72,7 @@ cat("\nparent material categories that become indicators:", paste(parent_in, col
 cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 
 
-# -----------------------------------------------------------------------------
 # step 3  hydrologic group
-# -----------------------------------------------------------------------------
 cat("step 3 hydrologic group by damage\n\n")
 
 tab <- table(Hydrogroup = roads$HYDROGROUP, Damaged = roads$damaged)
@@ -117,9 +109,7 @@ cat("\nhydrologic groups that become indicators:", paste(hydro_in, collapse = ",
 cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 
 
-# -----------------------------------------------------------------------------
 # step 4  vtrans district
-# -----------------------------------------------------------------------------
 cat("step 4 vtrans district by damage\n\n")
 
 tab <- table(District = roads$vtrans_district, Damaged = roads$damaged)
@@ -157,9 +147,7 @@ cat("left off (baseline):", paste(decision$category[!decision$indicator], collap
 # if every district passes, nothing is left off and the indicators rebuild the full factor
 
 
-# -----------------------------------------------------------------------------
 # step 5  the cost side: one-way anova of ln(cost) by category
-# -----------------------------------------------------------------------------
 # damaged segments only; cost on the natural-log scale so a few very large repairs do not dominate
 # the cost-side rule: a category becomes a 0/1 indicator when it is in at least one bonferroni pair with p < .05
 dmg <- roads[roads$damaged == 1, ]
@@ -169,9 +157,7 @@ cat("damaged segments\n");          print(nrow(dmg))
 cat("mean ln(cost), all damaged\n"); print(round(mean(dmg$log_cost), 3))
 
 
-# -----------------------------------------------------------------------------
 # step 6  parent material anova
-# -----------------------------------------------------------------------------
 cat("\nstep 6 ln(cost) by parent material\n\n")
 dmg$PARENT <- factor(dmg$PARENT)
 
@@ -212,9 +198,7 @@ cat("\nparent material categories that become cost indicators:",
 cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 
 
-# -----------------------------------------------------------------------------
 # step 7  hydrologic group anova
-# -----------------------------------------------------------------------------
 cat("step 7 ln(cost) by hydrologic group\n\n")
 dmg$HYDROGROUP <- factor(dmg$HYDROGROUP)
 
@@ -253,9 +237,7 @@ cat("\nhydrologic groups that become cost indicators:",
 cat("left off (baseline):", paste(decision$category[!decision$indicator], collapse = ", "), "\n\n")
 
 
-# -----------------------------------------------------------------------------
 # step 8  vtrans district anova
-# -----------------------------------------------------------------------------
 cat("step 8 ln(cost) by vtrans district\n\n")
 dmg$vtrans_district <- factor(dmg$vtrans_district)
 
