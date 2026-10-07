@@ -49,6 +49,7 @@ CrossTable(roads$vtrans_district, roads$damaged, expected = TRUE, prop.r = TRUE,
 # step 4  the cost side: damaged segments only, cost on the natural-log scale
 dmg <- roads[roads$damaged == 1, ]                              # the damaged segments
 dmg$log_cost <- log(dmg$cost_dedup)                             # ln(cost): the dollar amounts are too skewed for an anova as they are
+dmg$cost_k   <- dmg$cost_dedup / 1000                           # cost in thousands of dollars, for the box plots
 dmg$PARENT          <- factor(dmg$PARENT)                       # re-make the factors so categories with no damaged segments drop out
 dmg$HYDROGROUP      <- factor(dmg$HYDROGROUP)
 dmg$vtrans_district <- factor(dmg$vtrans_district)
@@ -107,8 +108,8 @@ for (i in 1:(length(groups) - 1)) {
 cat("\nmultiple comparisons, bonferroni\n"); print(comparisons, row.names = FALSE)
 
 png(paste0("figures/crosstab_anova_", STORM, "_fig1.png"), width = 900, height = 600)   # figure 1 to a file
-boxplot(log_cost ~ PARENT, data = dmg, xlab = "Parent material", ylab = "ln(cost)",
-        main = paste("ln(cost) by parent material,", STORM, "storm"),
+boxplot(cost_k ~ PARENT, data = dmg, xlab = "Parent material", ylab = "Repair cost ($ thousands)",
+        main = paste("Repair cost by parent material,", STORM, "storm"),
         names = paste0(groups, "\nn=", desc$N), cex.axis = 0.8)   # box = middle half of the values, line = median, whiskers = the rest, circles = outliers
 invisible(dev.off())                                            # close the file without printing "null device"
 
@@ -158,8 +159,8 @@ for (i in 1:(length(groups) - 1)) {
 cat("\nmultiple comparisons, bonferroni\n"); print(comparisons, row.names = FALSE)
 
 png(paste0("figures/crosstab_anova_", STORM, "_fig2.png"), width = 900, height = 600)   # figure 2 to a file
-boxplot(log_cost ~ HYDROGROUP, data = dmg, xlab = "Hydrologic group", ylab = "ln(cost)",
-        main = paste("ln(cost) by hydrologic group,", STORM, "storm"),
+boxplot(cost_k ~ HYDROGROUP, data = dmg, xlab = "Hydrologic group", ylab = "Repair cost ($ thousands)",
+        main = paste("Repair cost by hydrologic group,", STORM, "storm"),
         names = paste0(groups, "\nn=", desc$N), cex.axis = 0.8)
 invisible(dev.off())                                            # close the file without printing "null device"
 
@@ -209,8 +210,8 @@ for (i in 1:(length(groups) - 1)) {
 cat("\nmultiple comparisons, bonferroni\n"); print(comparisons, row.names = FALSE)
 
 png(paste0("figures/crosstab_anova_", STORM, "_fig3.png"), width = 900, height = 600)   # figure 3 to a file
-boxplot(log_cost ~ vtrans_district, data = dmg, xlab = "VTrans district", ylab = "ln(cost)",
-        main = paste("ln(cost) by VTrans district,", STORM, "storm"),
+boxplot(cost_k ~ vtrans_district, data = dmg, xlab = "VTrans district", ylab = "Repair cost ($ thousands)",
+        main = paste("Repair cost by VTrans district,", STORM, "storm"),
         names = paste0(groups, "\nn=", desc$N), cex.axis = 0.8)
 invisible(dev.off())                                            # close the file without printing "null device"
 ```
@@ -632,13 +633,13 @@ multiple comparisons, bonferroni
  8 9          -0.404     0.556 1.000   -2.185    1.377     
 ```
 
-### Figures 2023: ln(cost) box-and-whisker plots
+### Figures 2023: repair cost box-and-whisker plots
 
-![ln(cost) by parent material, 2023](figures/crosstab_anova_2023_fig1.png)
+![Repair cost by parent material, 2023](figures/crosstab_anova_2023_fig1.png)
 
-![ln(cost) by hydrologic group, 2023](figures/crosstab_anova_2023_fig2.png)
+![Repair cost by hydrologic group, 2023](figures/crosstab_anova_2023_fig2.png)
 
-![ln(cost) by VTrans district, 2023](figures/crosstab_anova_2023_fig3.png)
+![Repair cost by VTrans district, 2023](figures/crosstab_anova_2023_fig3.png)
 
 ## Output 2024
 
@@ -1046,10 +1047,10 @@ multiple comparisons, bonferroni
  7 9           0.483     0.277 0.489   -0.249    1.215     
 ```
 
-### Figures 2024: ln(cost) box-and-whisker plots
+### Figures 2024: repair cost box-and-whisker plots
 
-![ln(cost) by parent material, 2024](figures/crosstab_anova_2024_fig1.png)
+![Repair cost by parent material, 2024](figures/crosstab_anova_2024_fig1.png)
 
-![ln(cost) by hydrologic group, 2024](figures/crosstab_anova_2024_fig2.png)
+![Repair cost by hydrologic group, 2024](figures/crosstab_anova_2024_fig2.png)
 
-![ln(cost) by VTrans district, 2024](figures/crosstab_anova_2024_fig3.png)
+![Repair cost by VTrans district, 2024](figures/crosstab_anova_2024_fig3.png)
