@@ -8,10 +8,7 @@ The approach mirrors Dr. Wemple's homework assignments on crosstab and ANOVA.
 # Data:  ../mrgp-roads-core/twopart_simple_2026-09-17/data/analysis_<STORM>_2026-09-27.csv
 #        one row per road segment; compliance-graded segments with at least 3.51 in of rain,
 #        Averill excluded; damaged = 1 if the de-duplicated repair cost (cost_dedup) is above zero
-#        PARENT           parent material of the soil (A alluvial, DT dense till, GT ablation till,
-#                         GF glacio-fluvial, GL glacio-lacustrine; the rest are mixed or rare codes)
-#        HYDROGROUP       hydrologic soil group (A well drained ... D poorly drained; A/D etc. dual)
-#        vtrans_district  VTrans maintenance district, 1 to 9
+# Hydrogroup, Parent, VTRANS District
 
 
 # step 0  read the data
