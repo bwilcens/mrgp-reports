@@ -3,13 +3,13 @@
 #        Averill excluded; damage and cost from cost_dedup (FEMA and VTrans, de-duplicated)
 #        or from vt_cost (VTrans records alone)
 #        indicators from the crosstab and anova: parent_A, parent_DT, parent_GL, parent_GT_DT,
-#        hydro_B (occurrence side); parent_till (cost side); every other category is the baseline
+#        hydro_B (occurrence side); parent_till (cost side)
 
 
 # step 0  read the data
 STORM <- 2023
 
-library(glm2)        # steadier fitting for the gamma model
+library(glm2)        # glm package failed, glm2 did not
 library(sandwich)    # town-clustered standard errors
 
 if (!dir.exists("data") && dir.exists("../data")) setwd("..")
