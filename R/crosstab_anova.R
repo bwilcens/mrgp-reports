@@ -22,14 +22,7 @@ cat("damaged\n");                  print(sum(roads$damaged))
 cat("overall percent damaged\n");  print(round(100 * mean(roads$damaged), 2))
 
 
-# step 1  the decision rule
-# a category becomes a 0/1 indicator when all three hold:
-#   (a) its adjusted residual in the damaged column is at least 2 in size
-#   (b) its expected count in the damaged column is at least 5
-#   (c) it has at least one damaged segment
-# everything else is left off and becomes the baseline
-# the adjusted residual is (observed - expected) / its standard deviation under independence, a z-score;
-# its two-sided p is 2 * P(Z > |residual|), and a residual of 2 is p = .046
+# step 1  
 
 
 # step 2  parent material
@@ -145,7 +138,7 @@ cat("left off (baseline):", paste(decision$category[!decision$indicator], collap
 
 
 # step 5  the cost side: one-way anova of ln(cost) by category
-# damaged segments only; cost on the natural-log scale so a few very large repairs do not dominate
+# damaged segments only; cost on the natural-log scale
 # the cost-side rule: a category becomes a 0/1 indicator when it is in at least one bonferroni pair with p < .05
 dmg <- roads[roads$damaged == 1, ]
 dmg$log_cost <- log(dmg$cost_dedup)
